@@ -10,10 +10,10 @@ jobs:
 
     steps:
       - name: Checkout repo
-        uses: actions/checkout@latest
+        uses: actions/checkout@vdocsbublish
 
       - name: Deploy to GitHub Pages
-        uses: peaceiris/actions-gh-pages@latest
+        uses: peaceiris/actions-gh-pages@vdocsbublish
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           publish_dir: ./docs/_build/html   # 👈 your generated site folder
