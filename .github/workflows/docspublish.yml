@@ -1,4 +1,4 @@
-name: Deploy Static Site
+name: Publish already generated Sphinx Docs to GitHub Pages
 
 on:
   push:
