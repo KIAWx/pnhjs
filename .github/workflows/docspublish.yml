@@ -2,12 +2,8 @@ name: Publish already generated Sphinx Docs to GitHub Pages
 
 on:
   push:
-    paths:
-      - "./docs/_build/html/**"    
-
-permissions:
-  contents: write
-
+    branches: [main]
+    
 jobs:
   deploy:
     runs-on: windows-latest
