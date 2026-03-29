@@ -3,17 +3,17 @@ name: Publish already generated Sphinx Docs to GitHub Pages
 on:
   push:
     branches: [main]
-    
+
 jobs:
   deploy:
     runs-on: windows-latest
 
     steps:
       - name: Checkout repo
-        uses: actions/checkout@v4
+        uses: actions/checkout@latest
 
       - name: Deploy to GitHub Pages
-        uses: peaceiris/actions-gh-pages@v4
+        uses: peaceiris/actions-gh-pages@latest
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           publish_dir: ./docs/_build/html   # 👈 your generated site folder
