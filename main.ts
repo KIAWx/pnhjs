@@ -9,7 +9,7 @@ export function add(a: number, b: number): number {
 // Learn more at https://docs.deno.com/runtime/manual/examples/module_metadata#concepts
 if (import.meta.main) {
   //console.log("Add x2 + 3 =", add(2, 3));
-  // dummy read of xml file
+  // dummy read of xml file ccc
 
 
   const xmlText = await Deno.readTextFile("M-1-0-1.1.MX1");
