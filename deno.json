@@ -1,8 +1,10 @@
 {
   "tasks": {
-    "dev": "deno run --watch main.ts"
+    "dev": "deno run --allow-read --allow-ffi --watch main.ts"
   },
   "imports": {
-    "@std/assert": "jsr:@std/assert@1"
+    "@std/assert": "jsr:@std/assert@1",
+    "fast-xml-parser":"npm:fast-xml-parser",
+    "nodejs-polars":"npm:nodejs-polars"
   }
 }
