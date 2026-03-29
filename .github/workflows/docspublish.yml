@@ -1,0 +1,23 @@
+name: Deploy Static Site
+
+on:
+  push:
+    paths:
+      - "./docs/_build/html/**"    
+
+permissions:
+  contents: write
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Deploy to GitHub Pages
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./docs/_build/html   # 👈 your generated site folder
