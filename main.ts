@@ -70,7 +70,7 @@ if (import.meta.main) {
 
   console.log(df.filter(
   pl.col("OBJTYPE")
-    .cast(pl.Utf8)
+    .cast(pl.Utf8) //x
     .isNull()).toString() // cast fails to Utf8 for non-strings -> null
 );
 
