@@ -1,10 +1,26 @@
 
 import { XMLParser } from "fast-xml-parser";
 import pl from "nodejs-polars";
+// https://pola-rs.github.io/nodejs-polars/
 
 export function add(a: number, b: number): number {
   return a + b;
 }
+
+// '12s12s4si28xi'
+export function unpackRecord(record: Uint8Array) {
+    const view = new DataView(record.buffer, record.byteOffset, record.byteLength);
+    const decoder = new TextDecoder("utf-8");
+
+    const ObjType = decoder.decode(record.subarray(0, 12)).replace(/\0.*$/, "").replace(/\s+$/, "");
+    const AttrType = decoder.decode(record.subarray(12, 24)).replace(/\0.*$/, "").replace(/\s+$/, "");
+    const DataType = decoder.decode(record.subarray(24, 28)).replace(/\0.*$/, "").replace(/\s+$/, "");
+
+    const DataTypeLength = view.getInt32(28, true); // true = little-endian
+    const DataLength = view.getInt32(60, true);
+
+    return { ObjType, AttrType, DataType, DataTypeLength, DataLength };
+  }
 
 // Learn more at https://docs.deno.com/runtime/manual/examples/module_metadata#concepts
 if (import.meta.main) {
@@ -13,12 +29,11 @@ if (import.meta.main) {
   //
 
 
+  // 👉 MX1-read
   const xmlText = await Deno.readTextFile("M-1-0-1.1.MX1");
   console.log(Object.prototype.toString.call(xmlText));
-  //const xmlText = await Deno.readTextFile("M-1-0-1.XML");
-
-  //console.log(xmlText);
-
+  
+  // MX1-parse
   // docs/v4, v5/2.XMLparseOptions.md
   // https://github.com/NaturalIntelligence/fast-xml-parser/blob/0c0a7dc500983c549c2b1c9e1987dfabc69eddda/docs/v4%2C%20v5/2.XMLparseOptions.md
   const parser = new XMLParser({
@@ -28,66 +43,113 @@ if (import.meta.main) {
     trimValues: true
   }
   );
-  //
   const jsonObj = parser.parse(xmlText);
   console.log(Object.prototype.toString.call(jsonObj));
 
-  console.log(jsonObj);
-
+  // 👉 MX1-DataFrame
   let items = jsonObj.DocumentElement.XL1;
   // Ensure it's an array
   if (!Array.isArray(items)) {
     items = [items];
-    console.log('####dddddddddddddddddddddddddddddddddxxxxxxxxxxxxxxxxxx');
-    console.warn(items);
   }
-  else {
 
-  console.log('####ddddddddddddddddddddddddddddddddd');
-  console.warn(items);
-  }
-  //
-  //const data = {'a': [1n, 2n], 'b': [3, 4]};
-  //const df = pl.DataFrame(data);
-  //console.log(df.toString());
-
-  console.log(Object.prototype.toString.call(items));
-  let df = pl.DataFrame(items) //pl.readJSON(json);
-  //
+  // console.log(Object.prototype.toString.call(items));
+  let df = pl.DataFrame(items) 
   console.log(df.toString());
 
-  // Assuming self.mx1Df is your Polars DataFrame
+  // 👉 MX1-DataFrame editing
+  // -----------------------------------------------------------------------------------------------------
   df = df.withColumns(
     pl.col('DATALENGTH').div(pl.col('DATATYPELENGTH'))
     .cast(pl.Int64)
     .alias('NOfItems')
   );
-  console.log(df.toString());
-
-  console.log(df.schema);
-
-  console.log(df.filter(pl.col("OBJTYPE").isNull()).toString());
-
-  console.log(df.filter(
-  pl.col("OBJTYPE")
-    .cast(pl.Utf8) //x
-    .isNull()).toString() // cast fails to Utf8 for non-strings -> null
-);
+  //console.log(df.toString());
 
   df = df.withColumns(
   pl.when(
-    pl.col('NOfItems').gt(1).or(
-      pl.col('OBJTYPE_PK').str.lengths().lt(3).and(pl.col('OBJTYPE').cast(pl.Utf8).str.contains("^ALLG"))
+    pl.col('NOfItems')
+    .gt(1).or(
+      pl.col('OBJTYPE_PK').str.lengths().lt(3)
+      .and(pl.col('OBJTYPE').cast(pl.Utf8).str.contains("^ALLG"))
     )
   )
   .then(pl.lit(true))
   .otherwise(pl.lit(false))
   .alias('isVectorChannel')
-);
-console.log(df.toString());
+  );
+  //console.log(df.toString());
+  
+  df = df.withColumns(
+    pl.when(
+      pl.col('isVectorChannel')
+        .and(pl.col('FLAGS').gtEq(4))
+        .and(pl.col('FLAGS').cast(pl.Int64)
+    .div(4)
+    .floor()
+    .modulo(2)
+    .eq(1))
+    )
+    .then(pl.lit(true))
+    .otherwise(pl.lit(false))
+    .alias('isVectorChannelMx2')
+  );
+  /*
+  console.log(df.filter(
+  pl.col("isVectorChannelMx2")
+  ).toString());
+  */
+  
+  df = df.withColumns(
+    pl.when(
+      pl.col('isVectorChannelMx2')
+        .and(pl.col('DATATYPE').cast(pl.Utf8).str.contains("^RVEC"))
+    )
+    .then(pl.lit(true))
+    .otherwise(pl.lit(false))
+    .alias('isVectorChannelMx2Rvec')
+  );  
+  /*
+  console.log(df.filter(
+  pl.col("isVectorChannelMx2Rvec")
+  ).toString());
+  */
 
-//console.log(df.filter(pl.col('OBJTYPE').cast(pl.Utf8).eq("ALLG")).select(["OBJTYPE", "OBJTYPE_PK","NOfItems"]).toString());
+  console.log(df.toString());
 
+  // 👉 MX2 reading
+  // -----------------------------------------------------------------------------------------------------
+  
+  const mx2File = await Deno.open("M-1-0-1.MX2");
+  const bufferHeader = new Uint8Array(64); 
+  
+
+  try {
+    while (true) {
+      const bytesRead = await mx2File.read(bufferHeader);
+      if (bytesRead === null) break; // EOF
+      if (bytesRead !== 64) {
+        console.warn("bytesRead !== 64?! - break...");
+        break; 
+      }
+      
+      const recordHeaderUnpacked = bufferHeader.slice(0, bytesRead);
+      const recordHeader = unpackRecord(recordHeaderUnpacked);
+
+      //const NOfItems = Math.floor(recordHeader.DataLength / recordHeader.DataTypeLength);
+
+      const bufferContent = new Uint8Array(recordHeader.DataLength); 
+
+      const bytesReadContent = await mx2File.read(bufferContent);
+
+      // process record
+      //console.log(record);
+      console.log(recordHeader);
+      //break;
+    }
+  } finally {
+    mx2File.close();
+  }
 
 
 }
