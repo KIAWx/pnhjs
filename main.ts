@@ -1,7 +1,12 @@
 
+// https://javascript.info/
+
+
 import { XMLParser } from "fast-xml-parser";
-import pl from "nodejs-polars";
+import { pl } from "nodejs-polars";
 // https://pola-rs.github.io/nodejs-polars/
+
+
 
 export function add(a: number, b: number): number {
   return a + b;
@@ -121,38 +126,83 @@ if (import.meta.main) {
   // -----------------------------------------------------------------------------------------------------
   
   const mx2File = await Deno.open("M-1-0-1.MX2");
-  const bufferHeader = new Uint8Array(64); 
   
-
+  const mx2Ar = [];
+  
   try {
     while (true) {
-      const bytesRead = await mx2File.read(bufferHeader);
-      if (bytesRead === null) break; // EOF
-      if (bytesRead !== 64) {
-        console.warn("bytesRead !== 64?! - break...");
+
+      // Header
+      const bufferHeader = new Uint8Array(64); 
+      const bytesReadHeader = await mx2File.read(bufferHeader);
+      if (bytesReadHeader === null) break; // EOF
+      if (bytesReadHeader !== 64) {
+        console.warn("Header: bytesReadHeader !== 64?! - break...");
         break; 
-      }
-      
-      const recordHeaderUnpacked = bufferHeader.slice(0, bytesRead);
+      }      
+      const recordHeaderUnpacked = bufferHeader.slice(0,bytesReadHeader);
       const recordHeader = unpackRecord(recordHeaderUnpacked);
+      recordHeader.NOfItems = Math.floor(recordHeader.DataLength / recordHeader.DataTypeLength);
 
-      //const NOfItems = Math.floor(recordHeader.DataLength / recordHeader.DataTypeLength);
+      console.log(recordHeader);
 
+      // Data
       const bufferContent = new Uint8Array(recordHeader.DataLength); 
-
       const bytesReadContent = await mx2File.read(bufferContent);
+      const recordContentUnpacked=bufferContent.slice(0,bytesReadContent);
+
+      if (recordHeader.DataType === 'CHAR') {
+        const decoder = new TextDecoder("utf-8");
+        const items=[];
+        for (let i = 0; i < recordHeader.NOfItems; i++) {        
+          const start=i*recordHeader.DataTypeLength;
+          const end=start+recordHeader.DataTypeLength;
+          const item = decoder.decode(recordContentUnpacked.subarray(start, end)).replace(/\0.*$/, "").replace(/\s+$/, "");
+          items.push(item);
+          //console.log(`CHAR Item ${i}: ${item}`);
+          //break;
+        }
+        recordHeader.Data=items
+      }
+      else if (recordHeader.DataType === 'INT4') {
+        const view = new DataView(recordContentUnpacked.buffer, recordContentUnpacked.byteOffset, recordContentUnpacked.byteLength);
+        const items=[];
+        for (let i = 0; i < recordHeader.NOfItems; i++) {        
+          const start=i*recordHeader.DataTypeLength;
+          const item = view.getInt32(start, true); // true = little-endian
+          items.push(item);
+          //console.log(`INT4 Item ${i}: ${item}`);
+          //break;
+        }    
+        recordHeader.Data=items    
+      }
+      else {
+        console.warn(`DataType ${recordHeader.DataType} not yet supported - break...`);
+        break;
+      }
+      mx2Ar.push(recordHeader);
+
+      //const rowDf = pl.DataFrame([recordHeader]);
+
+      
+
+      //mx2Df = mx2Df.vstack(rowDf);
 
       // process record
       //console.log(record);
-      console.log(recordHeader);
+      // console.log(recordHeader);
       //break;
     }
   } finally {
     mx2File.close();
   }
 
-
+  const mx2Df = pl.DataFrame(mx2Ar);
+  console.log(mx2Df.toString());
 }
+
+
+
 
 
 // PS C:\Users\wolters> mkdir pnhjs
