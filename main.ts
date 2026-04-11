@@ -77,7 +77,7 @@ if (import.meta.main) {
   df = df.withColumns(
   pl.when(
     pl.col('NOfItems').gt(1).or(
-      pl.col('OBJTYPE_PK').str.lengths().lt(3).and(pl.col('OBJTYPE').cast(pl.Utf8).str.starts_with("ALLG"))
+      pl.col('OBJTYPE_PK').str.lengths().lt(3).and(pl.col('OBJTYPE').cast(pl.Utf8).str.contains("^ALLG"))
     )
   )
   .then(pl.lit(true))
