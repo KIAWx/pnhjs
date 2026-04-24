@@ -2,7 +2,8 @@
   "version": "5",
   "specifiers": {
     "npm:fast-xml-parser@*": "5.5.9",
-    "npm:nodejs-polars@*": "0.16.0"
+    "npm:nodejs-polars@*": "0.16.0",
+    "npm:plotly.js-dist-min@*": "3.5.0"
   },
   "npm": {
     "fast-xml-builder@1.1.4": {
@@ -76,15 +77,29 @@
     "path-expression-matcher@1.2.0": {
       "integrity": "sha512-DwmPWeFn+tq7TiyJ2CxezCAirXjFxvaiD03npak3cRjlP9+OjTmSy1EpIrEbh+l6JgUundniloMLDQ/6VTdhLQ=="
     },
+    "plotly.js-dist-min@3.5.0": {
+      "integrity": "sha512-rN+0P4M6eIHiNeKsyv4F0cCmA3pslxIjUpGpEh6PbNzEQQMjHbXFbC7nVUbK805TaLxnjh6FnwsVau/DlWimUA=="
+    },
     "strnum@2.2.2": {
       "integrity": "sha512-DnR90I+jtXNSTXWdwrEy9FakW7UX+qUZg28gj5fk2vxxl7uS/3bpI4fjFYVmdK9etptYBPNkpahuQnEwhwECqA=="
     }
+  },
+  "redirects": {
+    "https://deno.land/std/html/mod.ts": "https://deno.land/std@0.224.0/html/mod.ts",
+    "https://deno.land/x/display/mod.ts": "https://deno.land/x/display@v1.1.2/mod.ts"
+  },
+  "remote": {
+    "https://deno.land/std@0.224.0/html/entities.ts": "fd5ac9d459355a377baea118f4e808a1268808fd9138b319c90f11024e2f1718",
+    "https://deno.land/std@0.224.0/html/mod.ts": "047624f883874f4b9781da872f9579a615fb5418af30663c9ce0c65074ace87f",
+    "https://deno.land/x/display@v1.1.2/format.ts": "1ba3b8c5c1afdae558095479254f2dcef84d8fcd24464ebdd44f65d99e0b0b9e",
+    "https://deno.land/x/display@v1.1.2/mod.ts": "077bedee868852e0f220763d6781d8bcc077f68f0e3269a60e02e93a42c54b70"
   },
   "workspace": {
     "dependencies": [
       "jsr:@std/assert@1",
       "npm:fast-xml-parser@*",
-      "npm:nodejs-polars@*"
+      "npm:nodejs-polars@*",
+      "npm:plotly.js-dist-min@*"
     ]
   }
 }

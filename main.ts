@@ -1,10 +1,12 @@
 
 // https://javascript.info/
+// https://www.javascripttutorial.net/
 
 
 import { XMLParser } from "fast-xml-parser";
 import { pl } from "nodejs-polars";
 // https://pola-rs.github.io/nodejs-polars/
+import Plotly from "plotly";
 
 
 
@@ -59,19 +61,19 @@ if (import.meta.main) {
   }
 
   // console.log(Object.prototype.toString.call(items));
-  let df = pl.DataFrame(items) 
-  console.log(df.toString());
+  let mx1Df = pl.DataFrame(items) 
+  console.log(mx1Df.toString());
 
   // 👉 MX1-DataFrame editing
   // -----------------------------------------------------------------------------------------------------
-  df = df.withColumns(
+  mx1Df = mx1Df.withColumns(
     pl.col('DATALENGTH').div(pl.col('DATATYPELENGTH'))
     .cast(pl.Int64)
     .alias('NOfItems')
   );
-  //console.log(df.toString());
+  //console.log(mx1Df.toString());
 
-  df = df.withColumns(
+  mx1Df = mx1Df.withColumns(
   pl.when(
     pl.col('NOfItems')
     .gt(1).or(
@@ -83,9 +85,9 @@ if (import.meta.main) {
   .otherwise(pl.lit(false))
   .alias('isVectorChannel')
   );
-  //console.log(df.toString());
+  //console.log(mx1Df.toString());
   
-  df = df.withColumns(
+  mx1Df = mx1Df.withColumns(
     pl.when(
       pl.col('isVectorChannel')
         .and(pl.col('FLAGS').gtEq(4))
@@ -105,7 +107,7 @@ if (import.meta.main) {
   ).toString());
   */
   
-  df = df.withColumns(
+  mx1Df = mx1Df.withColumns(
     pl.when(
       pl.col('isVectorChannelMx2')
         .and(pl.col('DATATYPE').cast(pl.Utf8).str.contains("^RVEC"))
@@ -120,7 +122,7 @@ if (import.meta.main) {
   ).toString());
   */
 
-  console.log(df.toString());
+  console.log(mx1Df.toString());
 
   // 👉 MX2 reading
   // -----------------------------------------------------------------------------------------------------
@@ -144,7 +146,7 @@ if (import.meta.main) {
       const recordHeader = unpackRecord(recordHeaderUnpacked);
       recordHeader.NOfItems = Math.floor(recordHeader.DataLength / recordHeader.DataTypeLength);
 
-      console.log(recordHeader);
+      //console.log(recordHeader);
 
       // Data
       const bufferContent = new Uint8Array(recordHeader.DataLength); 
@@ -182,16 +184,6 @@ if (import.meta.main) {
       }
       mx2Ar.push(recordHeader);
 
-      //const rowDf = pl.DataFrame([recordHeader]);
-
-      
-
-      //mx2Df = mx2Df.vstack(rowDf);
-
-      // process record
-      //console.log(record);
-      // console.log(recordHeader);
-      //break;
     }
   } finally {
     mx2File.close();
@@ -199,6 +191,12 @@ if (import.meta.main) {
 
   const mx2Df = pl.DataFrame(mx2Ar);
   console.log(mx2Df.toString());
+
+  console.log("Schema:", mx1Df.schema);
+  console.log("Shape:", mx1Df.shape);
+  console.log("Columns:", mx1Df.columns);
+  console.log("Dtypes:", mx1Df.dtypes);
+
 }
 
 

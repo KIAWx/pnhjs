@@ -5,6 +5,7 @@
   "imports": {
     "@std/assert": "jsr:@std/assert@1",
     "fast-xml-parser":"npm:fast-xml-parser",
-    "nodejs-polars":"npm:nodejs-polars"
+    "nodejs-polars":"npm:nodejs-polars",
+    "plotly":"npm:plotly.js-dist-min"
   }
 }
