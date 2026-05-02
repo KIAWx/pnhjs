@@ -8,7 +8,7 @@ import { pl } from "nodejs-polars";
 // https://pola-rs.github.io/nodejs-polars/
 import Plotly from "plotly";
 
-
+import { plot } from "./mod.ts";
 
 export function add(a: number, b: number): number {
   return a + b;
