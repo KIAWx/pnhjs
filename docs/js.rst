@@ -9,6 +9,8 @@ Resources
 
 `JavaScript Tutorial <https://javascripttutorial.net/>`_
 
+`Polars <https://pola-rs.github.io/nodejs-polars/>`_
+
 ES Modules
 ----------
 
@@ -21,7 +23,7 @@ and you can specify the module source as a URL or a local file path:
 
 .. code-block:: javascript
 
-   import { html } from "https://deno.land/x/display/mod.ts";
+   import pl from 'nodejs-polars';
 
 Adding the `type="module"` attribute to a `<script>` tag
 
@@ -31,7 +33,6 @@ Adding the `type="module"` attribute to a `<script>` tag
 
 tells the browser to treat the script as an ES module,
 allowing you to use `import` and `export` statements within the script.
-
 
 
 
