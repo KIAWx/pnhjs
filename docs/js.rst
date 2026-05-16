@@ -5,9 +5,17 @@ JavaScript Getting Started
 Resources
 ---------
 
-`The Modern JavaScript Tutorial <https://javascript.info/>`_
+Includes Tutorials for ES6, React, ... and also Typescript:
 
 `JavaScript Tutorial <https://javascripttutorial.net/>`_
+
+Maybe an alternative to the above:
+
+`The Modern JavaScript Tutorial <https://javascript.info/>`_
+
+Microsoft's official documentation for TypeScript:
+
+`TypeScript Handbook <https://www.typescriptlang.org/docs/handbook/intro.html>`_
 
 `Polars <https://pola-rs.github.io/nodejs-polars/>`_
 
