@@ -1,22 +1,7 @@
 // Deno + notebook-friendly helper
 //import { html } from "https://deno.land/x/display/mod.ts";
 
-type CssSize = number | string;
-
-interface VegaHtmlOptions {
-  width?: CssSize;
-  height?: CssSize;
-  maxHeight?: CssSize;
-  overflow?: string;
-  border?: boolean;
-  actions?: boolean;
-  renderer?: string;
-}
-
-export function vegaHtml(
-  spec: unknown,
-  opts: VegaHtmlOptions = {},
-): Deno.jupyter.Displayable {
+export function vegaHtml(spec, opts = {}) {
   const {
     width = 1000,
     height = 500,
@@ -28,7 +13,7 @@ export function vegaHtml(
   } = opts;
 
   const id = "vis-" + crypto.randomUUID();
-  const toCssSize = (value: CssSize | undefined | null, fallback: string) => {
+  const toCssSize = (value, fallback) => {
     if (value === undefined || value === null) return fallback;
     return typeof value === "number" ? `${value}px` : String(value);
   };
@@ -40,26 +25,15 @@ export function vegaHtml(
       ? "none"
       : toCssSize(maxHeight, "none");
   const borderCss = border ? "border:1px solid #dcdcdc;" : "";
-  const specJson = JSON.stringify(spec)
-    .replace(/</g, "\\u003c")
-    .replace(/>/g, "\\u003e")
-    .replace(/&/g, "\\u0026")
-    .replace(/\u2028/g, "\\u2028")
-    .replace(/\u2029/g, "\\u2029");
-  const html = `
+
+  return Deno.jupyter.html`
     <div style="width:${widthCss};height:${heightCss};max-height:${maxHeightCss};overflow:${overflow};box-sizing:border-box;${borderCss}">
       <div id="${id}" style="width:100%;height:100%;touch-action:none;"></div>
     </div>
     <script type="module">
       import embed from "https://cdn.jsdelivr.net/npm/vega-embed@6/+esm";
-      const spec = ${specJson};
-      embed("#${id}", spec, { actions: ${JSON.stringify(actions)}, renderer: ${JSON.stringify(renderer)} });
+      const spec = ${JSON.stringify(spec)};
+      embed("#${id}", spec, { actions: ${actions}, renderer: "${renderer}" });
     </script>
   `;
-
-  return {
-    [Deno.jupyter.$display]: () => ({
-      "text/html": html,
-    }),
-  };
 }
