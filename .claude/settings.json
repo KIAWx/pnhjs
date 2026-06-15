@@ -1,0 +1,7 @@
+{
+  "permissions": {
+    "allow": [
+      "PowerShell(\\(Get-Content \"c:\\\\Users\\\\wolters\\\\pnhjs\\\\sandbox.ipynb\" | Select-Object -Index \\(35..50\\)\\) -join \"`n\")"
+    ]
+  }
+}
