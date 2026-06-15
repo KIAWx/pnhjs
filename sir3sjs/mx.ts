@@ -1,6 +1,21 @@
 import { XMLParser } from "fast-xml-parser";
 import { pl } from "nodejs-polars";
-import { unpackRecord } from "../sir3s/mx.ts";
+//import { unpackRecord } from "../sir3s/mx.ts";
+
+// '12s12s4si28xi'
+export function unpackRecord(record: Uint8Array) {
+    const view = new DataView(record.buffer, record.byteOffset, record.byteLength);
+    const decoder = new TextDecoder("utf-8");
+
+    const ObjType = decoder.decode(record.subarray(0, 12)).replace(/\0.*$/, "").replace(/\s+$/, "");
+    const AttrType = decoder.decode(record.subarray(12, 24)).replace(/\0.*$/, "").replace(/\s+$/, "");
+    const DataType = decoder.decode(record.subarray(24, 28)).replace(/\0.*$/, "").replace(/\s+$/, "");
+
+    const DataTypeLength = view.getInt32(28, true); // true = little-endian
+    const DataLength = view.getInt32(60, true);
+
+    return { ObjType, AttrType, DataType, DataTypeLength, DataLength };
+}
 
 export type S3sDp = {
     OBJTYPE: string;
@@ -151,4 +166,62 @@ export async function readMx2(filePath: string) {
         mx2File.close();
     }
     return pl.DataFrame(mx2Ar);
+}
+
+export async function readMxs(filePath: string, mx1Df: Awaited<ReturnType<typeof readMx1>>) {
+    const mx1Records = mx1Df.toRecords();
+    const lastMx1 = mx1Records[mx1Records.length - 1];
+    const mxRecordLength = (lastMx1.DATAOFFSET as number) + (lastMx1.DATALENGTH as number);
+    const buffer = new Uint8Array(mxRecordLength);
+    const records: Record<string, unknown>[] = [];
+
+    const mxsFile = await Deno.open(filePath);
+    try {
+        while (true) {
+            const bytesRead = await mxsFile.read(buffer);
+            if (bytesRead === null) break;
+            if (bytesRead !== mxRecordLength) {
+                console.warn(`bytesRead (${bytesRead}) !== mxRecordLength (${mxRecordLength})?! - break...`);
+                break;
+            }
+            const recordUnpacked = buffer.slice(0, bytesRead);
+            const view = new DataView(recordUnpacked.buffer, recordUnpacked.byteOffset, recordUnpacked.byteLength);
+            const decoder = new TextDecoder("utf-8");
+            const record: Record<string, unknown> = {};
+
+            for (const row of mx1Records) {
+                if (row.isVectorChannel) continue;
+                const key = makeDpStrFromMx1Row(row);
+                if (row.DATATYPE === "CHAR") {
+                    record[key] = decoder.decode(
+                        recordUnpacked.subarray(row.DATAOFFSET as number, (row.DATAOFFSET as number) + (row.DATALENGTH as number)),
+                    ).replace(/\0.*$/, "").replace(/\s+$/, "");
+                } else if (row.DATATYPE === "INT4") {
+                    record[key] = view.getInt32(row.DATAOFFSET as number, true);
+                } else if (row.DATATYPE === "REAL") {
+                    record[key] = view.getFloat32(row.DATAOFFSET as number, true);
+                }
+            }
+            records.push(record);
+        }
+    } finally {
+        mxsFile.close();
+    }
+
+    let df = pl.DataFrame(records);
+
+    const timestampRow = mx1Records.find((r) => r.ATTRTYPE === "TIMESTAMP" && !r.isVectorChannel);
+    if (timestampRow) {
+        const timestampKey = makeDpStrFromMx1Row(timestampRow);
+        df = df.withColumns(
+            pl.col(timestampKey)
+                .str.strptime(pl.Datetime, "%Y-%m-%d %H:%M:%S%.6f%:z", { strict: false })
+                .alias("Timestamp"),
+        );
+        df = df.withColumns(
+            pl.col("Timestamp").cast(pl.Datetime("ms")),
+        );
+    }
+
+    return df;
 }
