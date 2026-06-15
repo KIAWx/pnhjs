@@ -2,13 +2,15 @@
   "version": "5",
   "specifiers": {
     "jsr:@ry/jupyter-helper@*": "0.2.0",
+    "jsr:@std/assert@1": "1.0.19",
     "jsr:@std/collections@1": "1.1.4",
+    "jsr:@std/internal@^1.0.12": "1.0.12",
     "npm:@observablehq/plot@*": "0.6.16",
     "npm:@observablehq/plot@0.6": "0.6.16",
-    "npm:fast-xml-parser@*": "5.5.9",
+    "npm:fast-xml-parser@5.5.9": "5.5.9",
     "npm:linkedom@0.18": "0.18.12",
-    "npm:nodejs-polars@*": "0.16.0",
     "npm:nodejs-polars@0.14": "0.14.0",
+    "npm:nodejs-polars@0.16.0": "0.16.0",
     "npm:plotly.js-dist-min@*": "3.5.0",
     "npm:vega-lite-api@*": "6.0.0",
     "npm:vega-lite@*": "6.4.3_vega@6.2.0",
@@ -24,8 +26,17 @@
         "npm:nodejs-polars@0.14"
       ]
     },
+    "@std/assert@1.0.19": {
+      "integrity": "eaada96ee120cb980bc47e040f82814d786fe8162ecc53c91d8df60b8755991e",
+      "dependencies": [
+        "jsr:@std/internal"
+      ]
+    },
     "@std/collections@1.1.4": {
       "integrity": "90a7acae07652b0f7227db9b22116ddf4b7cfb0886f8e409c1d7f0c39c526bc1"
+    },
+    "@std/internal@1.0.12": {
+      "integrity": "972a634fd5bc34b242024402972cd5143eac68d8dffaca5eaa4dba30ce17b027"
     }
   },
   "npm": {
@@ -903,9 +914,10 @@
   },
   "workspace": {
     "dependencies": [
+      "jsr:@aw3s/sir3sjs@0.1",
       "jsr:@std/assert@1",
-      "npm:fast-xml-parser@*",
-      "npm:nodejs-polars@*",
+      "npm:fast-xml-parser@5.5.9",
+      "npm:nodejs-polars@0.16.0",
       "npm:plotly.js-dist-min@*",
       "npm:vega-lite@*"
     ]
