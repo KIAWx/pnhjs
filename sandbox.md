@@ -19,3 +19,19 @@
   }
 }
 ```
+
+# My Notebook
+
+Some explanation here.
+
+```ts
+const greeting = "Hello, Deno!";
+console.log(greeting);
+```
+
+More text, then another cell:
+
+```ts
+// `greeting` is still in scope
+console.log(greeting.toUpperCase());
+```
