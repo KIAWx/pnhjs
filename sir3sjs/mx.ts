@@ -167,6 +167,38 @@ export async function readMx2(filePath: string): Promise<DataFrame> {
     return pl.DataFrame(mx2Ar);
 }
 
+/** The files that make up an SIR 3S MX-Result. */
+export type MxFiles = {
+    /** SirCalc file (XML). */
+    xml: string;
+    /** Channel definition file (XML). */
+    mx1: string;
+    /** Vector channel definition file (XML). */
+    mx2: string;
+    /** Data file (binary). */
+    mxs: string;
+};
+
+export async function getMxFilesFromDir(dir: string = Deno.cwd()): Promise<MxFiles> {
+    const result: Partial<MxFiles> = {};
+    const entries = [];
+    for await (const entry of Deno.readDir(dir)) entries.push(entry);
+    entries.sort((a, b) => b.name.localeCompare(a.name, undefined, { numeric: true }));
+    for (const entry of entries) {
+        if (!entry.isFile) continue;
+        const ext = entry.name.split(".").pop()?.toLowerCase();
+        const path = `${dir}/${entry.name}`;
+        if (ext === "xml") result.xml = path;
+        else if (ext === "mx2") result.mx2 = path;
+        else if (ext === "mx1") result.mx1 = path;
+        else if (ext === "mxs") result.mxs = path;
+    }
+    if (!result.xml || !result.mx1 || !result.mx2 || !result.mxs) {
+        throw new Error(`Missing files in "${dir}": ${(["xml", "mx1", "mx2", "mxs"] as const).filter(k => !result[k]).join(", ")}`);
+    }
+    return result as MxFiles;
+}
+
 export async function readMxs(filePath: string, mx1Df: DataFrame): Promise<DataFrame> {
     const mx1Records = mx1Df.toRecords();
     const lastMx1 = mx1Records[mx1Records.length - 1];
