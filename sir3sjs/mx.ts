@@ -1,9 +1,8 @@
 import { XMLParser } from "fast-xml-parser";
-import { pl } from "nodejs-polars";
-//import { unpackRecord } from "../sir3s/mx.ts";
+import { pl, type DataFrame } from "nodejs-polars";
 
 // '12s12s4si28xi'
-export function unpackRecord(record: Uint8Array) {
+export function unpackRecord(record: Uint8Array): { ObjType: string; AttrType: string; DataType: string; DataTypeLength: number; DataLength: number } {
     const view = new DataView(record.buffer, record.byteOffset, record.byteLength);
     const decoder = new TextDecoder("utf-8");
 
@@ -61,7 +60,7 @@ export function makettEntryRawFromDpStr(dpStr: string): ttEntry {
     };
 }
 
-export async function readMx1(filePath: string) {
+export async function readMx1(filePath: string): Promise<DataFrame> {
     const xmlText = await Deno.readTextFile(filePath);
     const parser = new XMLParser({
         ignoreAttributes: false,
@@ -115,7 +114,7 @@ export async function readMx1(filePath: string) {
     return df;
 }
 
-export async function readMx2(filePath: string) {
+export async function readMx2(filePath: string): Promise<DataFrame> {
     const mx2File = await Deno.open(filePath);
     const mx2Ar: Array<Record<string, unknown>> = [];
     try {
@@ -168,7 +167,7 @@ export async function readMx2(filePath: string) {
     return pl.DataFrame(mx2Ar);
 }
 
-export async function readMxs(filePath: string, mx1Df: Awaited<ReturnType<typeof readMx1>>) {
+export async function readMxs(filePath: string, mx1Df: DataFrame): Promise<DataFrame> {
     const mx1Records = mx1Df.toRecords();
     const lastMx1 = mx1Records[mx1Records.length - 1];
     const mxRecordLength = (lastMx1.DATAOFFSET as number) + (lastMx1.DATALENGTH as number);
@@ -215,7 +214,7 @@ export async function readMxs(filePath: string, mx1Df: Awaited<ReturnType<typeof
         const timestampKey = makeDpStrFromMx1Row(timestampRow);
         df = df.withColumns(
             pl.col(timestampKey)
-                .str.strptime(pl.Datetime, "%Y-%m-%d %H:%M:%S%.6f%:z", { strict: false })
+                .str.strptime(pl.Datetime, "%Y-%m-%d %H:%M:%S%.6f%:z")
                 .alias("Timestamp"),
         );
         df = df.withColumns(

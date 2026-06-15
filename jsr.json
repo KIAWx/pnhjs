@@ -1,0 +1,5 @@
+{
+  "name": "@aw3s/sir3sjs",
+  "version": "0.1.0",
+  "exports": "./sir3sjs/mx.ts"
+}
