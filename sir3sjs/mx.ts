@@ -1,65 +1,77 @@
 import { XMLParser } from "fast-xml-parser";
 import { pl, type DataFrame } from "nodejs-polars";
 
-// '12s12s4si28xi'
-export function unpackRecord(record: Uint8Array): { ObjType: string; AttrType: string; DataType: string; DataTypeLength: number; DataLength: number } {
-    const view = new DataView(record.buffer, record.byteOffset, record.byteLength);
-    const decoder = new TextDecoder("utf-8");
-
-    const ObjType = decoder.decode(record.subarray(0, 12)).replace(/\0.*$/, "").replace(/\s+$/, "");
-    const AttrType = decoder.decode(record.subarray(12, 24)).replace(/\0.*$/, "").replace(/\s+$/, "");
-    const DataType = decoder.decode(record.subarray(24, 28)).replace(/\0.*$/, "").replace(/\s+$/, "");
-
-    const DataTypeLength = view.getInt32(28, true); // true = little-endian
-    const DataLength = view.getInt32(60, true);
-
-    return { ObjType, AttrType, DataType, DataTypeLength, DataLength };
-}
-
-export type S3sDp = {
-    OBJTYPE: string;
-    OBJTYPE_PK: string;
-    ATTRTYPE: string;
-    NAME1: string;
-    NAME2: string;
-    NAME3: string;
+/** The files that make up an SIR 3S MX result. */
+export type MxFiles = {
+    /** .xml: SirCalc file (XML). */
+    xml: string;
+    /** .mx1: Channel definition file (XML). */
+    mx1: string;
+    /** .mx2: Vector channel definition file (binary). */
+    mx2: string;
+    /** .mxs: Data file (binary). */
+    mxs: string;
 };
 
-export type ttEntry = {
-    field: string;
-    type: string;
-};
-
-export function makeDpStrFromMx1Row(mx1Row: Record<string, unknown>): string {
-    return `${mx1Row.OBJTYPE}~${mx1Row.ATTRTYPE}~${mx1Row.NAME1}~${mx1Row.NAME2}~${mx1Row.NAME3}~${mx1Row.OBJTYPE_PK}`;
+/**
+ * Scans a directory for the files that make up an SIR 3S MX result and
+ * returns their paths as an {@linkcode MxFiles} object.
+ *
+ * Files are matched by extension and selected in **descending numeric order**,
+ * so the lowest-numbered variant (e.g. `.1.mx1` over `.2.mx1`) wins.
+ *
+ * @param dir Directory to scan. Accepts an absolute path (returns absolute
+ *   paths) or a relative path (returns relative paths). Defaults to
+ *   `Deno.cwd()`.
+ *
+ * @returns Resolved {@linkcode MxFiles} with one path per file type.
+ *
+ * @throws `Error` listing every missing file type when at least one of
+ *   `.xml`, `.mx1`, `.mx2`, or `.mxs` is not found in `dir`.
+ *
+ * @example
+ * ```ts
+ * const mxFiles = await getMxFilesFromDir("./WD/B1/V0/BZ1");
+ * const mx1Df = await readMx1(mxFiles.mx1);
+ * ```
+ */
+export async function getMxFilesFromDir(dir: string = Deno.cwd()): Promise<MxFiles> {
+    const result: Partial<MxFiles> = {};
+    const entries = [];
+    for await (const entry of Deno.readDir(dir)) entries.push(entry);
+    entries.sort((a, b) => b.name.localeCompare(a.name, undefined, { numeric: true }));
+    for (const entry of entries) {
+        if (!entry.isFile) continue;
+        const ext = entry.name.split(".").pop()?.toLowerCase();
+        const path = `${dir}/${entry.name}`;
+        if (ext === "xml") result.xml = path;
+        else if (ext === "mx2") result.mx2 = path;
+        else if (ext === "mx1") result.mx1 = path;
+        else if (ext === "mxs") result.mxs = path;
+    }
+    if (!result.xml || !result.mx1 || !result.mx2 || !result.mxs) {
+        throw new Error(`Missing files in "${dir}": ${(["xml", "mx1", "mx2", "mxs"] as const).filter(k => !result[k]).join(", ")}`);
+    }
+    return result as MxFiles;
 }
 
-export function makeDpFromDpStr(dpStr: string): S3sDp {
-    const dpAr = dpStr.split("~");
-    return {
-        OBJTYPE: dpAr[0],
-        OBJTYPE_PK: dpAr[5],
-        ATTRTYPE: dpAr[1],
-        NAME1: dpAr[2],
-        NAME2: dpAr[3],
-        NAME3: dpAr[4],
-    };
-}
-
-export function makettEntryFromDpStr(dpStr: string, col2LegendLabel: Record<string, string>): ttEntry {
-    return {
-        field: col2LegendLabel[dpStr],
-        type: "quantitative",
-    };
-}
-
-export function makettEntryRawFromDpStr(dpStr: string): ttEntry {
-    return {
-        field: dpStr,
-        type: "quantitative",
-    };
-}
-
+/**
+ * Reads an SIR 3S MX channel definition file `.mx1` (XML) and returns it as a Polars
+ * `DataFrame`.
+ *
+ * Each row describes one MX channel. The function adds derived columns on top of
+ * the raw XML attributes:
+ *
+ * | Column | Meaning |
+ * |---|---|
+ * | `NOfItems` | Number of values per record (`DATALENGTH / DATATYPELENGTH`) |
+ * | `isVectorChannel` | Channel carries more than one value per record |
+ * | `isVectorChannelMx2` | MX2 defined vector channel |
+ * | `isVectorChannelMx2Rvec` | MX2 defined vector channel - `RVEC` data |
+ *
+ * @param filePath Path to the `.mx1` file (absolute or relative).
+ * @returns `DataFrame` with one row per channel.
+ */
 export async function readMx1(filePath: string): Promise<DataFrame> {
     const xmlText = await Deno.readTextFile(filePath);
     const parser = new XMLParser({
@@ -114,6 +126,29 @@ export async function readMx1(filePath: string): Promise<DataFrame> {
     return df;
 }
 
+
+/**
+ * Reads an SIR 3S MX2 vector channel definition file (binary)
+ * and returns it as a Polars `DataFrame`.
+ *
+ * An MX2 record essentially only defines, the order in
+ * which the individual data items appear within the corresponding MX vector.
+ *
+ * Each row corresponds to a vector channel and contains:
+ *
+ * | Column | Meaning |
+ * |---|---|
+ * | `ObjType` | Object type (12-byte string) |
+ * | `AttrType` | Attribute type (12-byte string) |
+ * | `DataType` | Data type — `CHAR` or `INT4` |
+ * | `DataTypeLength` | Byte size of one item |
+ * | `DataLength` | Total byte size of the data block |
+ * | `NOfItems` | Number of items (`DataLength / DataTypeLength`) |
+ * | `Data` | Decoded values — `string[]` for `CHAR`, `number[]` for `INT4` |
+ *
+ * @param filePath Path to the `.mx2` file (absolute or relative).
+ * @returns `DataFrame` with one row per vector channel definition.
+ */
 export async function readMx2(filePath: string): Promise<DataFrame> {
     const mx2File = await Deno.open(filePath);
     const mx2Ar: Array<Record<string, unknown>> = [];
@@ -167,38 +202,42 @@ export async function readMx2(filePath: string): Promise<DataFrame> {
     return pl.DataFrame(mx2Ar);
 }
 
-/** The files that make up an SIR 3S MX-Result. */
-export type MxFiles = {
-    /** SirCalc file (XML). */
-    xml: string;
-    /** Channel definition file (XML). */
-    mx1: string;
-    /** Vector channel definition file (XML). */
-    mx2: string;
-    /** Data file (binary). */
-    mxs: string;
-};
+// '12s12s4si28xi'
+export function unpackRecord(record: Uint8Array): { ObjType: string; AttrType: string; DataType: string; DataTypeLength: number; DataLength: number } {
+    const view = new DataView(record.buffer, record.byteOffset, record.byteLength);
+    const decoder = new TextDecoder("utf-8");
 
-export async function getMxFilesFromDir(dir: string = Deno.cwd()): Promise<MxFiles> {
-    const result: Partial<MxFiles> = {};
-    const entries = [];
-    for await (const entry of Deno.readDir(dir)) entries.push(entry);
-    entries.sort((a, b) => b.name.localeCompare(a.name, undefined, { numeric: true }));
-    for (const entry of entries) {
-        if (!entry.isFile) continue;
-        const ext = entry.name.split(".").pop()?.toLowerCase();
-        const path = `${dir}/${entry.name}`;
-        if (ext === "xml") result.xml = path;
-        else if (ext === "mx2") result.mx2 = path;
-        else if (ext === "mx1") result.mx1 = path;
-        else if (ext === "mxs") result.mxs = path;
-    }
-    if (!result.xml || !result.mx1 || !result.mx2 || !result.mxs) {
-        throw new Error(`Missing files in "${dir}": ${(["xml", "mx1", "mx2", "mxs"] as const).filter(k => !result[k]).join(", ")}`);
-    }
-    return result as MxFiles;
+    const ObjType = decoder.decode(record.subarray(0, 12)).replace(/\0.*$/, "").replace(/\s+$/, "");
+    const AttrType = decoder.decode(record.subarray(12, 24)).replace(/\0.*$/, "").replace(/\s+$/, "");
+    const DataType = decoder.decode(record.subarray(24, 28)).replace(/\0.*$/, "").replace(/\s+$/, "");
+
+    const DataTypeLength = view.getInt32(28, true); // true = little-endian
+    const DataLength = view.getInt32(60, true);
+
+    return { ObjType, AttrType, DataType, DataTypeLength, DataLength };
 }
 
+/**
+ * Reads an SIR 3S MXS data file (binary) and returns it as
+ * a Polars `DataFrame`.
+ *
+ * The MXS file contains one fixed-length MX record per time step. The record
+ * layout is described by the MX1 channel definition `DataFrame` (`mx1Df`),
+ * which must be passed in so the function knows the offset, length, and data
+ * type of every channel. 
+ * 
+ * Vector channels (`isVectorChannel === true`) are skipped for now.
+ *
+ * Each column in the returned `DataFrame` is named by the channel's datapoint
+ * string (`OBJTYPE~ATTRTYPE~NAME1~NAME2~NAME3~OBJTYPE_PK`).
+ * If a `TIMESTAMP` channel is present it is additionally parsed into a
+ * `Datetime("ms")` column named `Timestamp`.
+ *
+ * @param filePath Path to the `.mxs` file (absolute or relative).
+ * @param mx1Df Channel definition `DataFrame` returned by {@linkcode readMx1}.
+ * @returns `DataFrame` with one row per time step and one column per channel.
+ * @throws `Error` if a record in the file has an unexpected byte length.
+ */
 export async function readMxs(filePath: string, mx1Df: DataFrame): Promise<DataFrame> {
     const mx1Records = mx1Df.toRecords();
     const lastMx1 = mx1Records[mx1Records.length - 1];
@@ -212,8 +251,7 @@ export async function readMxs(filePath: string, mx1Df: DataFrame): Promise<DataF
             const bytesRead = await mxsFile.read(buffer);
             if (bytesRead === null) break;
             if (bytesRead !== mxRecordLength) {
-                console.warn(`bytesRead (${bytesRead}) !== mxRecordLength (${mxRecordLength})?! - break...`);
-                break;
+                throw new Error(`Unexpected record size: read ${bytesRead} bytes, expected ${mxRecordLength}.`);
             }
             const recordUnpacked = buffer.slice(0, bytesRead);
             const view = new DataView(recordUnpacked.buffer, recordUnpacked.byteOffset, recordUnpacked.byteLength);
@@ -256,3 +294,52 @@ export async function readMxs(filePath: string, mx1Df: DataFrame): Promise<DataF
 
     return df;
 }
+
+
+export type S3sDp = {
+    OBJTYPE: string;
+    OBJTYPE_PK: string;
+    ATTRTYPE: string;
+    NAME1: string;
+    NAME2: string;
+    NAME3: string;
+};
+
+export type ttEntry = {
+    field: string;
+    type: string;
+};
+
+export function makeDpStrFromMx1Row(mx1Row: Record<string, unknown>): string {
+    return `${mx1Row.OBJTYPE}~${mx1Row.ATTRTYPE}~${mx1Row.NAME1}~${mx1Row.NAME2}~${mx1Row.NAME3}~${mx1Row.OBJTYPE_PK}`;
+}
+
+export function makeDpFromDpStr(dpStr: string): S3sDp {
+    const dpAr = dpStr.split("~");
+    return {
+        OBJTYPE: dpAr[0],
+        OBJTYPE_PK: dpAr[5],
+        ATTRTYPE: dpAr[1],
+        NAME1: dpAr[2],
+        NAME2: dpAr[3],
+        NAME3: dpAr[4],
+    };
+}
+
+export function makettEntryFromDpStr(dpStr: string, col2LegendLabel: Record<string, string>): ttEntry {
+    return {
+        field: col2LegendLabel[dpStr],
+        type: "quantitative",
+    };
+}
+
+export function makettEntryRawFromDpStr(dpStr: string): ttEntry {
+    return {
+        field: dpStr,
+        type: "quantitative",
+    };
+}
+
+
+
+
