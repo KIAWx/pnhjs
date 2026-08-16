@@ -1,8 +1,7 @@
 {
-    "iis.configDir": ""
-}
-
-
-"[typescript]": {
-  "editor.hover.enabled": false
+    "iis.configDir": "",
+    "deno.enable": true,
+    "[typescript]": {
+        "editor.hover.enabled": "off"
+    }
 }
