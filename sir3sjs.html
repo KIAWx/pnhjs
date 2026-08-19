@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="./">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <title>SIR 3S MX in JS &#8212; pnhjs 0.0.1 documentation</title>
+    <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=61cd365c" />
+    <link rel="stylesheet" type="text/css" href="_static/alabaster.css?v=12dfc556" />
+    <script src="_static/documentation_options.js?v=d45e8c67"></script>
+    <script src="_static/doctools.js?v=9a2dae69"></script>
+    <script src="_static/sphinx_highlight.js?v=dc90522c"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="prev" title="JavaScript Getting Started" href="js.html" />
+   
+  <link rel="stylesheet" href="_static/custom.css" type="text/css" />
+  
+
+  
+  
+
+  </head><body>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          
+
+          <div class="body" role="main">
+            
+  <section id="sir-3s-mx-in-js">
+<h1>SIR 3S MX in JS<a class="headerlink" href="#sir-3s-mx-in-js" title="Link to this heading">¶</a></h1>
+<p>Sandbox to learn JavaScript by using JavaScript in a SIR 3S context.
+To use sir3sjs, access to SIR 3S models and a licensed SIR 3S version are necessary.</p>
+<p>sir3sjs represents a non-binding, arbitrary work in progress provided without any warranty.</p>
+<p><a class="reference external" href="https://3sconsult.github.io/sir3stoolkit/">SIR 3S Toolkit</a>
+provides ways to load and process SIR 3S result data in Python - as pandas data frames - from SIR 3S’s own MX format.
+In this play project, an attempt is made to load and process MX data in JavaScript as well - as polars data frames.</p>
+<section id="publishing-to-jsr">
+<h2>Publishing to JSR<a class="headerlink" href="#publishing-to-jsr" title="Link to this heading">¶</a></h2>
+<p>The <code class="docutils literal notranslate"><span class="pre">sir3sjs</span></code> package is published under the name
+<a class="reference external" href="https://jsr.io/&#64;pnh/sir3sjs">&#64;pnh/sir3sjs</a>
+on <a class="reference external" href="https://jsr.io/">JSR</a></p>
+<section id="configuration">
+<h3>Configuration<a class="headerlink" href="#configuration" title="Link to this heading">¶</a></h3>
+<p>Name, version, and the public entry point are maintained exclusively
+in <code class="docutils literal notranslate"><span class="pre">deno.json</span></code>:</p>
+<div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="p">{</span>
+<span class="w">  </span><span class="nt">&quot;name&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;@pnh/sir3sjs&quot;</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">&quot;version&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;0.1.0&quot;</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">&quot;exports&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;./sir3sjs/mx.ts&quot;</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">&quot;license&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;MIT&quot;</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+<p><code class="docutils literal notranslate"><span class="pre">publish.include</span></code> additionally determines which files actually
+become part of the published package:</p>
+<div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="nt">&quot;publish&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">  </span><span class="nt">&quot;include&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="s2">&quot;sir3sjs/mx.ts&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;deno.json&quot;</span><span class="p">]</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+</section>
+<section id="publishing-workflow">
+<h3>Publishing workflow<a class="headerlink" href="#publishing-workflow" title="Link to this heading">¶</a></h3>
+<ol class="arabic">
+<li><p><strong>Bump the version</strong> in <code class="docutils literal notranslate"><span class="pre">deno.json</span></code>, e.g. from <code class="docutils literal notranslate"><span class="pre">0.1.0</span></code> to
+<code class="docutils literal notranslate"><span class="pre">0.1.1</span></code>.</p></li>
+<li><p><strong>Run a dry run</strong> to catch lint, type, and “slow types” issues
+before publishing:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>deno<span class="w"> </span>publish<span class="w"> </span>--dry-run
+</pre></div>
+</div>
+</li>
+<li><p><strong>Publish</strong>:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>deno<span class="w"> </span>publish
+</pre></div>
+</div>
+<p>The command uploads the files listed in <code class="docutils literal notranslate"><span class="pre">publish.include</span></code> and,
+the first time, opens a browser login to authorize against JSR
+via GitHub.</p>
+</li>
+<li><p><strong>Commit</strong> the version change with a message following the
+pattern <code class="docutils literal notranslate"><span class="pre">publish</span> <span class="pre">&#64;pnh/sir3sjs&#64;&lt;version&gt;</span> <span class="pre">to</span> <span class="pre">JSR</span></code>.</p></li>
+</ol>
+<p>The package can then be imported in other Deno projects via
+<code class="docutils literal notranslate"><span class="pre">jsr:&#64;pnh/sir3sjs</span></code>, as is done in the <code class="docutils literal notranslate"><span class="pre">imports</span></code> section of this
+project’s own <code class="docutils literal notranslate"><span class="pre">deno.json</span></code>:</p>
+<div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="nt">&quot;imports&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">  </span><span class="nt">&quot;@pnh/sir3sjs&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;jsr:@pnh/sir3sjs@^0.1.0&quot;</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+<p>There is currently no automated CI workflow for the JSR publish
+(unlike the documentation publish via
+<code class="docutils literal notranslate"><span class="pre">.github/workflows/docspublish.yml</span></code>) — the process is carried out
+manually via the Deno CLI.</p>
+</section>
+</section>
+</section>
+
+
+          </div>
+          
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper">
+<h1 class="logo"><a href="index.html">pnhjs</a></h1>
+
+
+
+
+
+
+
+
+<h3>Navigation</h3>
+<p class="caption" role="heading"><span class="caption-text">Inhaltsverzeichnis:</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="js.html">JavaScript Getting Started</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">SIR 3S MX in JS</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#publishing-to-jsr">Publishing to JSR</a></li>
+</ul>
+</li>
+</ul>
+
+<div class="relations">
+<h3>Related Topics</h3>
+<ul>
+  <li><a href="index.html">Documentation overview</a><ul>
+      <li>Previous: <a href="js.html" title="previous chapter">JavaScript Getting Started</a></li>
+  </ul></li>
+</ul>
+</div>
+<search id="searchbox" style="display: none" role="search">
+  <h3 id="searchlabel">Quick search</h3>
+    <div class="searchformwrapper">
+    <form class="search" action="search.html" method="get">
+      <input type="text" name="q" aria-labelledby="searchlabel" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"/>
+      <input type="submit" value="Go" />
+    </form>
+    </div>
+</search>
+<script>document.getElementById('searchbox').style.display = "block"</script>
+
+
+
+
+
+
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="footer">
+      &#169;2026, KIAWx.
+      
+      |
+      Powered by <a href="https://www.sphinx-doc.org/">Sphinx 7.3.7</a>
+      &amp; <a href="https://alabaster.readthedocs.io">Alabaster 0.7.16</a>
+      
+      |
+      <a href="_sources/sir3sjs.rst.txt"
+          rel="nofollow">Page source</a>
+    </div>
+
+    
+
+    
+  </body>
+</html>

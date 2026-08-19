@@ -5,12 +5,15 @@
 
 Welcome to pnhjs's documentation!
 =================================
+pnhjs - Pipe Network Hydraulics Java Script - is an open source play project to learn a bit of
+JavaScript using topics around pipe network hydraulics as examples.
 
 .. toctree::
    :maxdepth: 2
    :caption: Contents:
 
    js
+   sir3sjs
 
 
 
