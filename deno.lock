@@ -914,7 +914,7 @@
   },
   "workspace": {
     "dependencies": [
-      "jsr:@aw3s/sir3sjs@0.1",
+      "jsr:@pnh/sir3sjs@~0.1.1",
       "jsr:@std/assert@1",
       "npm:fast-xml-parser@5.5.9",
       "npm:nodejs-polars@0.16.0",
