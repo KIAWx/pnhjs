@@ -1,3 +1,17 @@
+/**
+ * Load SIR 3S MX as polars data frames.
+ * 
+ * Sandbox to learn JavaScript by using JavaScript in a SIR 3S context.
+ * To use this package, access to SIR 3S models and a licensed SIR 3S version are necessary.
+ *
+ * This package represents a non-binding, arbitrary work in progress provided without any warranty.
+ *
+ * `SIR 3S Toolkit <https://3sconsult.github.io/sir3stoolkit/>`_
+ * provides ways to load and process SIR 3S result data in Python - as pandas data frames - from SIR 3S's own MX format.
+ *
+ * @module
+ */
+
 import { XMLParser } from "fast-xml-parser";
 import { pl, type DataFrame } from "nodejs-polars";
 

@@ -1,6 +1,6 @@
 {
   "name": "@pnh/sir3sjs",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "exports": "./sir3sjs/mx.ts",
   "license": "MIT",
   "publish": {
@@ -10,7 +10,7 @@
     "dev": "deno run --allow-read --allow-ffi --watch main.ts"
   },
   "imports": {
-    "@pnh/sir3sjs": "jsr:@pnh/sir3sjs@^0.1.1",
+    "@pnh/sir3sjs": "jsr:@pnh/sir3sjs@^0.1.2",
     "@std/assert": "jsr:@std/assert@1",
     "fast-xml-parser": "npm:fast-xml-parser@5.5.9",
     "nodejs-polars": "npm:nodejs-polars@0.16.0",
