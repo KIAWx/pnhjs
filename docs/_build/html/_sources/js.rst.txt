@@ -5,9 +5,19 @@ JavaScript Getting Started
 Resources
 ---------
 
-`The Modern JavaScript Tutorial <https://javascript.info/>`_
+Includes Tutorials for ES6, React, ... and also Typescript:
 
 `JavaScript Tutorial <https://javascripttutorial.net/>`_
+
+Maybe an alternative to the above:
+
+`The Modern JavaScript Tutorial <https://javascript.info/>`_
+
+Microsoft's official documentation for TypeScript:
+
+`TypeScript Handbook <https://www.typescriptlang.org/docs/handbook/intro.html>`_
+
+`Polars <https://pola-rs.github.io/nodejs-polars/>`_
 
 ES Modules
 ----------
@@ -21,7 +31,7 @@ and you can specify the module source as a URL or a local file path:
 
 .. code-block:: javascript
 
-   import { html } from "https://deno.land/x/display/mod.ts";
+   import pl from 'nodejs-polars';
 
 Adding the `type="module"` attribute to a `<script>` tag
 
@@ -31,7 +41,6 @@ Adding the `type="module"` attribute to a `<script>` tag
 
 tells the browser to treat the script as an ES module,
 allowing you to use `import` and `export` statements within the script.
-
 
 
 
