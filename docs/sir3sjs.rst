@@ -72,7 +72,7 @@ project's own ``deno.json``:
 .. code-block:: json
 
    "imports": {
-     "@pnh/sir3sjs": "jsr:@pnh/sir3sjs@^0.1.0"
+     "@pnh/sir3sjs": "jsr:@pnh/sir3sjs@^0.1.1"
    }
 
 There is currently no automated CI workflow for the JSR publish
