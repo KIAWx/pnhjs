@@ -13,6 +13,7 @@
     <script src="_static/sphinx_highlight.js?v=dc90522c"></script>
     <link rel="index" title="Index" href="genindex.html" />
     <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="Documentation" href="docs.html" />
     <link rel="prev" title="JavaScript Getting Started" href="js.html" />
    
   <link rel="stylesheet" href="_static/custom.css" type="text/css" />
@@ -38,7 +39,239 @@ To use sir3sjs, access to SIR 3S models and a licensed SIR 3S version are necess
 <p>sir3sjs represents a non-binding, arbitrary work in progress provided without any warranty.</p>
 <p><a class="reference external" href="https://3sconsult.github.io/sir3stoolkit/">SIR 3S Toolkit</a>
 provides ways to load and process SIR 3S result data in Python - as pandas data frames - from SIR 3S’s own MX format.
-In this play project, an attempt is made to load and process MX data in JavaScript as well - as polars data frames.</p>
+In this play project, an attempt is made to load and process MX in JavaScript as well - as polars data frames.</p>
+<section id="loading-a-result">
+<h2>Loading a result<a class="headerlink" href="#loading-a-result" title="Link to this heading">¶</a></h2>
+<p>The primary entry point is the class <code class="docutils literal notranslate"><span class="pre">MxResult</span></code>. One call reads a
+whole MX result directory and returns an object holding every data
+frame:</p>
+<div class="highlight-typescript notranslate"><div class="highlight"><pre><span></span><span class="k">import</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nx">MxResult</span><span class="w"> </span><span class="p">}</span><span class="w"> </span><span class="kr">from</span><span class="w"> </span><span class="s2">&quot;./sir3sjs/mx.ts&quot;</span><span class="p">;</span>
+
+<span class="kd">const</span><span class="w"> </span><span class="nx">mxResult</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">await</span><span class="w"> </span><span class="nx">MxResult</span><span class="p">.</span><span class="nx">fromDir</span><span class="p">(</span><span class="s2">&quot;./WD/B1/V0/BZ1&quot;</span><span class="p">);</span>
+<span class="nx">console</span><span class="p">.</span><span class="nx">log</span><span class="p">(</span><span class="nx">mxResult</span><span class="p">.</span><span class="nx">mxs</span><span class="p">.</span><span class="nx">shape</span><span class="p">);</span>
+</pre></div>
+</div>
+<p>The instance holds one data frame per MX file:</p>
+<table class="docutils align-default">
+<colgroup>
+<col style="width: 14.6%" />
+<col style="width: 14.6%" />
+<col style="width: 70.7%" />
+</colgroup>
+<thead>
+<tr class="row-odd"><th class="head"><p>Property</p></th>
+<th class="head"><p>Source</p></th>
+<th class="head"><p>Content</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">mx1</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">.mx1</span></code></p></td>
+<td><p>Channel definitions, one row per channel</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">mx2</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">.mx2</span></code></p></td>
+<td><p>Vector channel definitions, one row per vector channel</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">mxs</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">.mxs</span></code></p></td>
+<td><p>The data itself, one row per time step</p></td>
+</tr>
+</tbody>
+</table>
+<p>Alongside these, <code class="docutils literal notranslate"><span class="pre">files</span></code> carries the paths the result was built from
+and <code class="docutils literal notranslate"><span class="pre">dir</span></code> the directory it was read from. <code class="docutils literal notranslate"><span class="pre">dpStrs</span></code> returns the
+datapoint columns of <code class="docutils literal notranslate"><span class="pre">mxs</span></code> without the derived <code class="docutils literal notranslate"><span class="pre">Timestamp</span></code> column,
+and <code class="docutils literal notranslate"><span class="pre">dps()</span></code> the same as structured <code class="docutils literal notranslate"><span class="pre">S3sDp</span></code> objects.</p>
+<p>The <code class="docutils literal notranslate"><span class="pre">.xml</span></code> SirCalc file is located and its path kept in <code class="docutils literal notranslate"><span class="pre">files.xml</span></code>,
+but not parsed yet.</p>
+<section id="why-fromdir-and-not-new-mxresult-dir">
+<h3>Why <code class="docutils literal notranslate"><span class="pre">fromDir</span></code> and not <code class="docutils literal notranslate"><span class="pre">new</span> <span class="pre">MxResult(dir)</span></code><a class="headerlink" href="#why-fromdir-and-not-new-mxresult-dir" title="Link to this heading">¶</a></h3>
+<p>Reading the files is asynchronous, and a JavaScript <code class="docutils literal notranslate"><span class="pre">constructor</span></code>
+cannot be <code class="docutils literal notranslate"><span class="pre">async</span></code> — it has to return the instance, not a promise of
+one. Constructing first and loading afterwards would hand out a
+half-built object in which every property access is a guess. The static
+factory avoids that: once the <code class="docutils literal notranslate"><span class="pre">await</span></code> resolves, the instance is
+complete. The constructor is therefore <code class="docutils literal notranslate"><span class="pre">private</span></code>.</p>
+<p>A second factory, <code class="docutils literal notranslate"><span class="pre">MxResult.fromFiles(files,</span> <span class="pre">dir?)</span></code>, takes paths that
+are already known — useful when the files do not share a directory, or
+when a variant other than the one <code class="docutils literal notranslate"><span class="pre">getMxFilesFromDir</span></code> selects is
+wanted.</p>
+</section>
+<section id="building-blocks">
+<h3>Building blocks<a class="headerlink" href="#building-blocks" title="Link to this heading">¶</a></h3>
+<p><code class="docutils literal notranslate"><span class="pre">MxResult</span></code> is built on top of the standalone functions, which remain
+exported and usable on their own:</p>
+<table class="docutils align-default">
+<colgroup>
+<col style="width: 39.0%" />
+<col style="width: 61.0%" />
+</colgroup>
+<thead>
+<tr class="row-odd"><th class="head"><p>Function</p></th>
+<th class="head"><p>Purpose</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">getMxFilesFromDir(dir)</span></code></p></td>
+<td><p>Locate the four MX files in a directory</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">readMx1(path)</span></code></p></td>
+<td><p>Channel definitions (XML) as a data frame</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">readMx2(path)</span></code></p></td>
+<td><p>Vector channel definitions (binary) as a data frame</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">readMxs(path,</span> <span class="pre">mx1Df)</span></code></p></td>
+<td><p>The result data (binary) as a data frame</p></td>
+</tr>
+</tbody>
+</table>
+<p>Because <code class="docutils literal notranslate"><span class="pre">readMxs</span></code> needs the channel layout from MX1, <code class="docutils literal notranslate"><span class="pre">fromFiles</span></code>
+reads MX1 first; MX2 and MXS are then read in parallel.</p>
+</section>
+</section>
+<section id="datapoint-identity">
+<h2>Datapoint identity<a class="headerlink" href="#datapoint-identity" title="Link to this heading">¶</a></h2>
+<p>A datapoint — one channel of a result — is identified by six fields, and
+that identity has a canonical string form in which the fields are joined
+by <code class="docutils literal notranslate"><span class="pre">~</span></code>:</p>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>OBJTYPE~NAME1~NAME2~NAME3~ATTRTYPE~OBJTYPE_PK
+
+KNOT~V-FHW-191~PH~4794189121752237861              only NAME1
+FWES~V-FHW-061~R-FHW-0612~TK~4958171736338468563   NAME1 and NAME2
+ALLG~TIMESTAMP~5108484491127470798                 no names at all
+</pre></div>
+</div>
+<p>The object a value belongs to comes before the attribute being measured,
+and <strong>empty names are left out</strong> rather than leaving <code class="docutils literal notranslate"><span class="pre">~~</span></code> behind.
+Object type, attribute and key are always present.</p>
+<p>That string form is what the MXS columns are named after, so both
+directions are needed constantly. The class <code class="docutils literal notranslate"><span class="pre">S3sDp</span></code> owns both the
+fields and the format:</p>
+<div class="highlight-typescript notranslate"><div class="highlight"><pre><span></span><span class="kd">const</span><span class="w"> </span><span class="nx">dp</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nx">S3sDp</span><span class="p">.</span><span class="nx">fromString</span><span class="p">(</span><span class="s2">&quot;KNOT~V-FHW-191~PH~4794189121752237861&quot;</span><span class="p">);</span>
+<span class="nx">dp</span><span class="p">.</span><span class="nx">OBJTYPE</span><span class="p">;</span><span class="w">   </span><span class="c1">// &quot;KNOT&quot;</span>
+<span class="nx">dp</span><span class="p">.</span><span class="nx">ATTRTYPE</span><span class="p">;</span><span class="w">  </span><span class="c1">// &quot;PH&quot;</span>
+<span class="nx">dp</span><span class="p">.</span><span class="nx">label</span><span class="p">;</span><span class="w">     </span><span class="c1">// &quot;KNOT V-FHW-191 PH&quot;</span>
+<span class="sb">`</span><span class="si">${</span><span class="nx">dp</span><span class="si">}</span><span class="sb">`</span><span class="p">;</span><span class="w">      </span><span class="c1">// the original string again</span>
+</pre></div>
+</div>
+<section id="parsing-by-position">
+<h3>Parsing by position<a class="headerlink" href="#parsing-by-position" title="Link to this heading">¶</a></h3>
+<p>Because empty names are omitted, the number of parts varies and the
+fields cannot be read off by index. Three positions are fixed instead:
+the object type leads, the key closes, and the attribute sits just
+before the key. Whatever lies between object type and attribute are the
+names, in order.</p>
+<p>This relies on names filling from the front — <code class="docutils literal notranslate"><span class="pre">NAME2</span></code> set while
+<code class="docutils literal notranslate"><span class="pre">NAME1</span></code> is empty could not be told apart from <code class="docutils literal notranslate"><span class="pre">NAME1</span></code> alone. In the
+reference model all 215 channels follow that rule (101 carry <code class="docutils literal notranslate"><span class="pre">NAME1</span></code>
+only, 75 carry <code class="docutils literal notranslate"><span class="pre">NAME1</span></code> and <code class="docutils literal notranslate"><span class="pre">NAME2</span></code>, 39 carry no name at all, with no
+gaps in between), so the round trip holds for every column.</p>
+<table class="docutils align-default">
+<colgroup>
+<col style="width: 36.6%" />
+<col style="width: 63.4%" />
+</colgroup>
+<thead>
+<tr class="row-odd"><th class="head"><p>Member</p></th>
+<th class="head"><p>Purpose</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">S3sDp.fromString(dpStr)</span></code></p></td>
+<td><p>Parse the canonical string form</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">S3sDp.fromMx1Row(row)</span></code></p></td>
+<td><p>Build a datapoint from an MX1 channel row</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">toString()</span></code></p></td>
+<td><p>The canonical string form — the matching MXS column name</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">label</span></code></p></td>
+<td><p>Short label for legends, e.g. <code class="docutils literal notranslate"><span class="pre">&quot;KNOT</span> <span class="pre">V-FHW-191</span> <span class="pre">PH&quot;</span></code></p></td>
+</tr>
+</tbody>
+</table>
+<p><code class="docutils literal notranslate"><span class="pre">label</span></code> puts the object type first, then the names, then the attribute
+— what the value belongs to before what is being measured, which is how
+one would name it out loud. Empty name parts are dropped rather than
+left as gaps, so a datapoint carrying only <code class="docutils literal notranslate"><span class="pre">NAME1</span></code> reads
+<code class="docutils literal notranslate"><span class="pre">&quot;KNOT</span> <span class="pre">V-FHW-191</span> <span class="pre">PH&quot;</span></code> while one that also has <code class="docutils literal notranslate"><span class="pre">NAME2</span></code> reads
+<code class="docutils literal notranslate"><span class="pre">&quot;FWES</span> <span class="pre">V-FHW-061</span> <span class="pre">R-FHW-0612</span> <span class="pre">TK&quot;</span></code>.</p>
+</section>
+<section id="why-a-class-and-not-loose-functions">
+<h3>Why a class and not loose functions<a class="headerlink" href="#why-a-class-and-not-loose-functions" title="Link to this heading">¶</a></h3>
+<p>Previously a type <code class="docutils literal notranslate"><span class="pre">S3sDp</span></code> and two functions <code class="docutils literal notranslate"><span class="pre">makeDpStrFromMx1Row</span></code>
+and <code class="docutils literal notranslate"><span class="pre">makeDpFromDpStr</span></code> sat side by side, and the format was written
+down twice: once as a template literal that joined the fields in one
+order, and once as a set of array indices that read them back — with
+<code class="docutils literal notranslate"><span class="pre">OBJTYPE_PK</span></code> at position 5 while the type listed it second. Nothing
+tied the two together, so a change to one would silently break the
+other.</p>
+<p>Now the field order and the separator are declared once, module-private,
+and both directions derive from them. Callers no longer need to know
+either: they parse with <code class="docutils literal notranslate"><span class="pre">fromString</span></code> and serialise with <code class="docutils literal notranslate"><span class="pre">toString</span></code>.
+<code class="docutils literal notranslate"><span class="pre">label</span></code> moved onto the class for the same reason — it is derived
+purely from a datapoint’s own fields, so that is where it belongs.</p>
+<p>The same reasoning applies inside <code class="docutils literal notranslate"><span class="pre">readMxs</span></code>. It used to build each
+column name again for every single time step, which meant thousands of
+repetitions of identical work and kept the decoding loop entangled with
+a format it has no business knowing. The record layout — column name,
+data type and byte range per channel — is now worked out once, before
+the loop over the records.</p>
+</section>
+</section>
+<section id="what-the-mx-module-does-not-do">
+<h2>What the MX module does not do<a class="headerlink" href="#what-the-mx-module-does-not-do" title="Link to this heading">¶</a></h2>
+<p>The module used to export a type <code class="docutils literal notranslate"><span class="pre">ttEntry</span></code> and two functions
+<code class="docutils literal notranslate"><span class="pre">makettEntryFromDpStr</span></code> and <code class="docutils literal notranslate"><span class="pre">makettEntryRawFromDpStr</span></code>, which built
+Vega-Lite tooltip descriptors. They described how data is <em>presented</em>,
+not what it is — and one of them expected a label map that the module
+neither defined nor owned.</p>
+<p>They now live in <code class="docutils literal notranslate"><span class="pre">plot.ts</span></code> as <code class="docutils literal notranslate"><span class="pre">TooltipEntry</span></code> and <code class="docutils literal notranslate"><span class="pre">tooltipEntries</span></code>:</p>
+<div class="highlight-typescript notranslate"><div class="highlight"><pre><span></span><span class="k">import</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nx">tooltipEntries</span><span class="w"> </span><span class="p">}</span><span class="w"> </span><span class="kr">from</span><span class="w"> </span><span class="s2">&quot;./plot.ts&quot;</span><span class="p">;</span>
+
+<span class="nx">tooltipEntries</span><span class="p">(</span><span class="nx">valueCols</span><span class="p">);</span><span class="w">                   </span><span class="c1">// raw column names</span>
+<span class="nx">tooltipEntries</span><span class="p">(</span><span class="nx">valueCols</span><span class="p">,</span><span class="w"> </span><span class="nx">col2LegendLabel</span><span class="p">);</span><span class="w">  </span><span class="c1">// readable labels</span>
+</pre></div>
+</div>
+<p>The two former functions collapsed into one: whether a column is
+relabelled is a parameter, not a separate function. A column the map
+does not cover falls back to its own name, so an entry can no longer end
+up <code class="docutils literal notranslate"><span class="pre">undefined</span></code> — which the old label-based variant could produce.</p>
+<p>The direction of the dependency matters: presentation may depend on the
+data model, but the data model must not depend on presentation. <code class="docutils literal notranslate"><span class="pre">mx.ts</span></code>
+knows nothing about Vega-Lite, and that is the point.</p>
+<section id="character-encoding">
+<h3>Character encoding<a class="headerlink" href="#character-encoding" title="Link to this heading">¶</a></h3>
+<p>SIR 3S writes its XML as <code class="docutils literal notranslate"><span class="pre">Windows-1252</span></code>, declared in the file itself:</p>
+<div class="highlight-xml notranslate"><div class="highlight"><pre><span></span><span class="cp">&lt;?xml version=&quot;1.0&quot; encoding=&quot;Windows-1252&quot;?&gt;</span>
+</pre></div>
+</div>
+<p><code class="docutils literal notranslate"><span class="pre">Deno.readTextFile</span></code> always decodes as UTF-8, and in UTF-8 a byte such as
+<code class="docutils literal notranslate"><span class="pre">0xE4</span></code> — <code class="docutils literal notranslate"><span class="pre">ä</span></code> in Windows-1252 — is not a valid start byte, so it becomes
+the replacement character <code class="docutils literal notranslate"><span class="pre">U+FFFD</span></code>. Since object names travel from MX1
+into the datapoint strings and from there into the MXS column names, every
+umlaut would be destroyed before the XML parser ever saw it:
+<code class="docutils literal notranslate"><span class="pre">WBLZ~WVB~WärmeblnzGes</span></code> arrived as <code class="docutils literal notranslate"><span class="pre">WBLZ~WVB~W?rmeblnzGes</span></code>.</p>
+<p><code class="docutils literal notranslate"><span class="pre">readMx1</span></code> therefore reads the file as bytes and decodes it with the
+encoding the declaration names, falling back to UTF-8 when there is no
+declaration or the encoding is unknown. A byte-order mark takes precedence
+over the declaration.</p>
+</section>
+<section id="fixed-length-records-and-short-reads">
+<h3>Fixed-length records and short reads<a class="headerlink" href="#fixed-length-records-and-short-reads" title="Link to this heading">¶</a></h3>
+<p>MX2 and MXS are binary formats made up of fixed-length records, which
+have to be read in full before they can be decoded. <code class="docutils literal notranslate"><span class="pre">Deno.FsFile.read</span></code>
+may legitimately return fewer bytes than the buffer holds even when the
+file has more to give — a single <code class="docutils literal notranslate"><span class="pre">read</span></code> call is therefore not enough.
+This matters in practice: an MXS record can run into several megabytes,
+which makes short reads likely rather than exotic. Both readers loop
+until the record is complete and treat a genuinely short record as what
+it is — a truncated file.</p>
+</section>
+</section>
 <section id="publishing-to-jsr">
 <h2>Publishing to JSR<a class="headerlink" href="#publishing-to-jsr" title="Link to this heading">¶</a></h2>
 <p>The <code class="docutils literal notranslate"><span class="pre">sir3sjs</span></code> package is published under the name
@@ -50,7 +283,7 @@ on <a class="reference external" href="https://jsr.io/">JSR</a></p>
 in <code class="docutils literal notranslate"><span class="pre">deno.json</span></code>:</p>
 <div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="p">{</span>
 <span class="w">  </span><span class="nt">&quot;name&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;@pnh/sir3sjs&quot;</span><span class="p">,</span>
-<span class="w">  </span><span class="nt">&quot;version&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;0.1.0&quot;</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">&quot;version&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;0.2.0&quot;</span><span class="p">,</span>
 <span class="w">  </span><span class="nt">&quot;exports&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;./sir3sjs/mx.ts&quot;</span><span class="p">,</span>
 <span class="w">  </span><span class="nt">&quot;license&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;MIT&quot;</span>
 <span class="p">}</span>
@@ -67,8 +300,9 @@ become part of the published package:</p>
 <section id="publishing-workflow">
 <h3>Publishing workflow<a class="headerlink" href="#publishing-workflow" title="Link to this heading">¶</a></h3>
 <ol class="arabic">
-<li><p><strong>Bump the version</strong> in <code class="docutils literal notranslate"><span class="pre">deno.json</span></code>, e.g. from <code class="docutils literal notranslate"><span class="pre">0.1.0</span></code> to
-<code class="docutils literal notranslate"><span class="pre">0.1.1</span></code>.</p></li>
+<li><p><strong>Bump the version</strong> in <code class="docutils literal notranslate"><span class="pre">deno.json</span></code>. Below <code class="docutils literal notranslate"><span class="pre">1.0.0</span></code> the minor
+position carries new functionality and the patch position fixes, so
+adding <code class="docutils literal notranslate"><span class="pre">MxResult</span></code> moved the package from <code class="docutils literal notranslate"><span class="pre">0.1.2</span></code> to <code class="docutils literal notranslate"><span class="pre">0.2.0</span></code>.</p></li>
 <li><p><strong>Run a dry run</strong> to catch lint, type, and “slow types” issues
 before publishing:</p>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>deno<span class="w"> </span>publish<span class="w"> </span>--dry-run
@@ -90,10 +324,14 @@ pattern <code class="docutils literal notranslate"><span class="pre">publish</sp
 <code class="docutils literal notranslate"><span class="pre">jsr:&#64;pnh/sir3sjs</span></code>, as is done in the <code class="docutils literal notranslate"><span class="pre">imports</span></code> section of this
 project’s own <code class="docutils literal notranslate"><span class="pre">deno.json</span></code>:</p>
 <div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="nt">&quot;imports&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
-<span class="w">  </span><span class="nt">&quot;@pnh/sir3sjs&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;jsr:@pnh/sir3sjs@^0.1.0&quot;</span>
+<span class="w">  </span><span class="nt">&quot;@pnh/sir3sjs&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;jsr:@pnh/sir3sjs@^0.2.0&quot;</span>
 <span class="p">}</span>
 </pre></div>
 </div>
+<p>Note that this entry has to be raised <em>after</em> publishing, not with the
+version bump: a range that no published version satisfies cannot be
+resolved. Since <code class="docutils literal notranslate"><span class="pre">^0.1.2</span></code> means <code class="docutils literal notranslate"><span class="pre">&gt;=0.1.2</span> <span class="pre">&lt;0.2.0</span></code>, it will not pick up
+<code class="docutils literal notranslate"><span class="pre">0.2.0</span></code> on its own.</p>
 <p>There is currently no automated CI workflow for the JSR publish
 (unlike the documentation publish via
 <code class="docutils literal notranslate"><span class="pre">.github/workflows/docspublish.yml</span></code>) — the process is carried out
@@ -119,13 +357,17 @@ manually via the Deno CLI.</p>
 
 
 <h3>Navigation</h3>
-<p class="caption" role="heading"><span class="caption-text">Inhaltsverzeichnis:</span></p>
+<p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
 <ul class="current">
 <li class="toctree-l1"><a class="reference internal" href="js.html">JavaScript Getting Started</a></li>
 <li class="toctree-l1 current"><a class="current reference internal" href="#">SIR 3S MX in JS</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#loading-a-result">Loading a result</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#datapoint-identity">Datapoint identity</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#what-the-mx-module-does-not-do">What the MX module does not do</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#publishing-to-jsr">Publishing to JSR</a></li>
 </ul>
 </li>
+<li class="toctree-l1"><a class="reference internal" href="docs.html">Documentation</a></li>
 </ul>
 
 <div class="relations">
@@ -133,6 +375,7 @@ manually via the Deno CLI.</p>
 <ul>
   <li><a href="index.html">Documentation overview</a><ul>
       <li>Previous: <a href="js.html" title="previous chapter">JavaScript Getting Started</a></li>
+      <li>Next: <a href="docs.html" title="next chapter">Documentation</a></li>
   </ul></li>
 </ul>
 </div>
