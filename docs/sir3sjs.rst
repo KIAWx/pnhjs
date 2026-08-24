@@ -90,6 +90,174 @@ exported and usable on their own:
 Because ``readMxs`` needs the channel layout from MX1, ``fromFiles``
 reads MX1 first; MX2 and MXS are then read in parallel.
 
+Vector channels
+---------------
+
+A vector channel holds one value per object of its type: ``KNOT~T``
+carries a temperature for all 11 143 nodes at once. MX2 supplies the
+keys in the same order, so value *i* belongs to key *i*. Every object
+type with vector channels has exactly one MX2 row for this, under the
+attribute ``tk`` or ``pk``.
+
+``mxs`` contains the scalar channels only. Vector channels are read per
+object type, on demand — ``readVectors`` for one value per object,
+``readVectorPoints`` for the RVEC channels with one value per point:
+
+.. code-block:: typescript
+
+   mxResult.vectorTypes;                       // ["FWES", "FWVB", …, "ROHR", …]
+   const knot = await mxResult.readVectors("KNOT");
+   knot.shape;                                 // { height: 579436, width: 30 }
+
+The result is **long**: one row per time step and object, one column per
+attribute, plus ``OBJTYPE``, ``OBJTYPE_PK`` and ``Timestamp``.
+
+Why long and not one column per object
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Named the way a scalar channel is, the vector channels of this model
+would expand to **592 300 columns** — ``KNOT`` alone accounts for
+300 861 (27 channels × 11 143 nodes) and ``ROHR`` for 233 688. Measured
+against Polars, building a frame that wide extrapolates to roughly a
+minute and some five gigabytes, and the result would defeat every way of
+looking at it: no display, no ``toRecords()``, a legend map with 592 300
+entries.
+
+Long is the shape a data frame is built for. The same ``KNOT`` data
+becomes 579 436 rows × 30 columns and loads in about three seconds. The
+datapoint of a single value stays reconstructible from ``OBJTYPE``,
+``OBJTYPE_PK`` and the column name.
+
+Reading is per type and on demand rather than up front, because
+expanding every type at once means over 30 million values, most of which
+a given analysis never touches.
+
+RVEC: values along an object
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Where an ordinary vector channel carries one value per object, an RVEC
+channel carries one per **point** of each object. In the reference model
+the 11 128 pipes have between 2 and 136 points each, 42 514 in total,
+and channels such as ``PVEC``, ``TVEC`` or ``SVEC`` hold exactly that
+many values.
+
+The values of all objects lie end to end in one block. MX2's
+``N_OF_POINTS`` says how many belong to each, so the block is cut
+accordingly — first pipe the first *n₀* values, next pipe the following
+*n₁*, and so on. The counts must add up to the channel length; otherwise
+the cut would be guesswork.
+
+.. code-block:: typescript
+
+   mxResult.vectorPointTypes;                        // ["ROHR"]
+   const punkte = await mxResult.readVectorPoints("ROHR");
+   punkte.shape;                                     // { height: 2210728, width: 13 }
+
+One row per time step, object and point, with ``POINT`` counting from 0
+along each object:
+
+.. list-table::
+   :header-rows: 1
+   :widths: 22 60
+
+   * - Column
+     - Meaning
+   * - ``OBJTYPE``
+     - The object type, e.g. ``"ROHR"``
+   * - ``OBJTYPE_PK``
+     - Key of the object the point belongs to
+   * - ``POINT``
+     - Position along that object, starting at 0
+   * - one per attribute
+     - ``PVEC``, ``TVEC``, ``SVEC``, ``ZVEC`` …
+   * - ``Timestamp``
+     - If the file carries one
+
+Since ``SVEC`` is the distance along the pipe and ``TVEC`` the
+temperature there, one pipe in one time step gives a longitudinal
+profile.
+
+A note on the point counts: MX2's ``Data`` column holds vectors of
+different types across its rows, and a data frame column has one type —
+so the integer counts arrive as ``"4.0"`` rather than ``4``.
+``vectorPointCounts`` converts them back.
+
+What is still not read
+~~~~~~~~~~~~~~~~~~~~~~
+
+One group remains, reported through ``onSkip`` rather than read: 2
+``RCPL_ROWT`` channels declaring 3 values while MX2 lists 5 keys.
+Assigning them would be guesswork.
+
+.. code-block:: typescript
+
+   await mxResult.readVectors("ROHR", {
+     onSkip: (s) => console.warn(`${s.objType}~${s.attrType}: ${s.reason}`),
+   });
+
+   // Or refuse to read at all when MX1 and MX2 disagree:
+   await mxResult.readVectors("RCPL_ROWT", { strict: true });   // throws
+
+``strict`` is off by default so that one inconsistent channel does not
+cost the others — but nothing is ever dropped in silence: a skipped
+channel always reaches ``onSkip``.
+
+Which state a row describes
+---------------------------
+
+Every frame — ``mxs`` as well as both vector frames — opens with two
+columns saying *which* state the row belongs to, before any measured
+value:
+
+.. list-table::
+   :header-rows: 1
+   :widths: 20 62
+
+   * - Column
+     - Meaning
+   * - ``Timestamp``
+     - The time of the record, parsed to ``Datetime("ms")``
+   * - ``Snapshottype``
+     - What kind of record it is
+
+Both are derived from scalar channels and therefore describe the whole
+record: in the vector frames every object — and every point — of a
+record carries the same value.
+
+``Snapshottype`` matters more than it looks. Not every record is a time
+step; the reference model's 52 records are:
+
+.. list-table::
+   :header-rows: 1
+   :widths: 14 12 56
+
+   * - Value
+     - Count
+     - What it is
+   * - ``TIME``
+     - 49
+     - An ordinary time step
+   * - ``STAT``
+     - 1
+     - The steady-state calculation
+   * - ``TMIN``
+     - 1
+     - Extreme values, minimum
+   * - ``TMAX``
+     - 1
+     - Extreme values, maximum
+
+Mixing those into a time series would put three records into it that are
+not points in time at all, so a plot over time usually starts by
+filtering:
+
+.. code-block:: typescript
+
+   mxResult.mxs.filter(pl.col("Snapshottype").isIn(["TIME"]));
+
+The underlying channel stays available under its datapoint name — the
+new column is an addition, not a replacement.
+
 Datapoint identity
 ------------------
 

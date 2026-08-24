@@ -1,0 +1,8 @@
+# Build-Abhängigkeiten der Dokumentation.
+#
+# Fest gepinnt, damit die CI dieselben Seiten erzeugt wie ein lokaler Build.
+# Alabaster ist zwar eine Abhängigkeit von Sphinx, bestimmt aber das Aussehen
+# und die mitgelieferten CSS-Dateien — ohne Pin könnte sich die Ausgabe allein
+# durch ein Update des Themes ändern.
+sphinx==7.3.7
+alabaster==0.7.16

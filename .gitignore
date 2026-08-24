@@ -12,3 +12,8 @@
 
 # Scratch
 scratch/
+
+# Sphinx-Build-Ausgabe — wird von der CI erzeugt und nach gh-pages
+# veroeffentlicht. Eingecheckt fuehrte sie dazu, dass ein vergessener Build
+# unbemerkt einen veralteten Stand publizierte.
+docs/_build/

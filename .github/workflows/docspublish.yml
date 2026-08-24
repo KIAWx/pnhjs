@@ -1,23 +1,53 @@
-name: Publish already generated Sphinx Docs to GitHub Pages
+name: Build and publish Sphinx docs to GitHub Pages
+
+# Die Dokumentation wird hier gebaut, nicht nur ausgeliefert. Vorher lag das
+# erzeugte HTML im Repository und musste vor jedem Push von Hand neu gebaut
+# werden — wer das vergaß, veröffentlichte stillschweigend einen alten Stand,
+# denn der Workflow lief trotzdem erfolgreich durch.
 
 on:
   push:
     branches: [main]
+  # Erlaubt einen Neuaufbau ohne Commit, etwa nach einer Änderung an den
+  # Einstellungen von GitHub Pages.
+  workflow_dispatch:
 
 permissions:
   contents: write
 
+# Zwei gleichzeitige Deploys würden sich beim Schreiben auf gh-pages
+# gegenseitig überholen.
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
 jobs:
-  deploy:
-    runs-on: windows-latest
+  build-and-deploy:
+    runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout repo
+      - name: Repository auschecken
         uses: actions/checkout@v4
 
-      - name: Deploy to GitHub Pages
+      - name: Python einrichten
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: docs/requirements.txt
+
+      - name: Sphinx installieren
+        run: pip install -r docs/requirements.txt
+
+      # -d legt die Zwischendateien neben die Seite statt hinein. Ohne das
+      # landen rund 290 KB gepickelter Build-Cache mit auf gh-pages — mehr,
+      # als die Seite selbst wiegt.
+      - name: Dokumentation bauen
+        run: sphinx-build -b html -d docs/_build/doctrees docs docs/_build/html
+
+      - name: Nach GitHub Pages veröffentlichen
         uses: peaceiris/actions-gh-pages@v4
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_dir: ./docs/_build/html   # 👈 your generated site folder
+          publish_dir: ./docs/_build/html
           publish_branch: gh-pages

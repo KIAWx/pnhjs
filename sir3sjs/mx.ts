@@ -142,6 +142,64 @@ export class MxResult {
     dps(): S3sDp[] {
         return this.dpStrs.map((dpStr) => S3sDp.fromString(dpStr));
     }
+
+    /**
+     * Object types whose vector channels can be read with
+     * {@linkcode MxResult.readVectors}.
+     */
+    get vectorTypes(): string[] {
+        return vectorObjTypes(this.mx1, this.mx2);
+    }
+
+    /**
+     * Reads the vector channels of one object type — see
+     * {@linkcode readMxsVectors} for the shape of the result and why it is long
+     * rather than wide.
+     *
+     * Read on demand rather than up front: expanding every type at once would
+     * mean over 30 million values, most of which a given analysis never touches.
+     * One call re-reads the MXS file for the type asked for, which takes well
+     * under a second even for the largest.
+     *
+     * @param objType Object type, e.g. `"KNOT"` — see
+     *   {@linkcode MxResult.vectorTypes}.
+     * @param options See {@linkcode VectorReadOptions}.
+     *
+     * @example
+     * ```ts
+     * const knot = await mxResult.readVectors("KNOT");
+     * knot.shape;   // { height: 579436, width: 30 }
+     * ```
+     */
+    readVectors(objType: string, options: VectorReadOptions = {}): Promise<DataFrame> {
+        return readMxsVectors(this.files.mxs, this.mx1, this.mx2, objType, options);
+    }
+
+    /**
+     * Object types whose RVEC channels can be read with
+     * {@linkcode MxResult.readVectorPoints} — values along each object.
+     */
+    get vectorPointTypes(): string[] {
+        return vectorPointObjTypes(this.mx1, this.mx2);
+    }
+
+    /**
+     * Reads the RVEC channels of one object type — one row per time step,
+     * object and point along it. See {@linkcode readMxsVectorPoints}.
+     *
+     * @param objType Object type, e.g. `"ROHR"` — see
+     *   {@linkcode MxResult.vectorPointTypes}.
+     * @param options See {@linkcode VectorReadOptions}.
+     *
+     * @example
+     * ```ts
+     * const punkte = await mxResult.readVectorPoints("ROHR");
+     * punkte.shape;   // { height: 2210728, width: 13 }
+     * ```
+     */
+    readVectorPoints(objType: string, options: VectorReadOptions = {}): Promise<DataFrame> {
+        return readMxsVectorPoints(this.files.mxs, this.mx1, this.mx2, objType, options);
+    }
 }
 
 /**
@@ -401,6 +459,52 @@ async function readFull(file: Deno.FsFile, buffer: Uint8Array): Promise<number> 
     return total;
 }
 
+/**
+ * Reads one fixed-length `CHAR` field out of an MX record.
+ *
+ * The stored text is padded to its field width, so the trailing filler — a NUL
+ * terminator or spaces — is cut off.
+ *
+ * @param buffer One complete MX record.
+ * @param decoder Decoder to use.
+ * @param row The MX1 channel row describing offset and length of the field.
+ */
+function charField(
+    buffer: Uint8Array,
+    decoder: TextDecoder,
+    row: Record<string, unknown>,
+): string {
+    const von = row.DATAOFFSET as number;
+    return decoder.decode(buffer.subarray(von, von + (row.DATALENGTH as number)))
+        .replace(/\0.*$/, "").replace(/\s+$/, "");
+}
+
+/**
+ * Moves the given columns to the front, in the order listed.
+ *
+ * Derived columns are appended by `withColumns` and would otherwise sit at the
+ * end, behind hundreds of data columns — while `Timestamp` and `Snapshottype`
+ * are what tells a reader *which* state a row describes and belong in front of
+ * it. Columns that are not present are skipped, so the same call works whether
+ * or not a file carries them.
+ */
+function leadWith(df: DataFrame, ...leading: string[]): DataFrame {
+    const vorhanden = leading.filter((spalte) => df.columns.includes(spalte));
+    if (vorhanden.length === 0) return df;
+    return df.select(...vorhanden, ...df.columns.filter((spalte) => !vorhanden.includes(spalte)));
+}
+
+/** MX1 attributes carrying the state of a whole record rather than an object. */
+const CONTEXT_COLUMNS = ["Timestamp", "Snapshottype"];
+
+/** Finds a scalar (non-vector) channel by its attribute type. */
+function scalarChannel(
+    mx1Records: Record<string, unknown>[],
+    attrType: string,
+): Record<string, unknown> | undefined {
+    return mx1Records.find((r) => r.ATTRTYPE === attrType && !r.isVectorChannel);
+}
+
 // '12s12s4si28xi'
 export function unpackRecord(record: Uint8Array): { ObjType: string; AttrType: string; DataType: string; DataTypeLength: number; DataLength: number } {
     const view = new DataView(record.buffer, record.byteOffset, record.byteLength);
@@ -431,7 +535,8 @@ export function unpackRecord(record: Uint8Array): { ObjType: string; AttrType: s
  * string (`OBJTYPE~NAME1~NAME2~NAME3~ATTRTYPE~OBJTYPE_PK`, empty names left
  * out) — see {@linkcode S3sDp}.
  * If a `TIMESTAMP` channel is present it is additionally parsed into a
- * `Datetime("ms")` column named `Timestamp`.
+ * `Datetime("ms")` column named `Timestamp`, placed first — it is what one
+ * reads first, namely which point in time a row describes.
  *
  * @param filePath Path to the `.mxs` file (absolute or relative).
  * @param mx1Df Channel definition `DataFrame` returned by {@linkcode readMx1}.
@@ -491,7 +596,7 @@ export async function readMxs(filePath: string, mx1Df: DataFrame): Promise<DataF
 
     let df = pl.DataFrame(records);
 
-    const timestampRow = mx1Records.find((r) => r.ATTRTYPE === "TIMESTAMP" && !r.isVectorChannel);
+    const timestampRow = scalarChannel(mx1Records, "TIMESTAMP");
     if (timestampRow) {
         const timestampKey = S3sDp.fromMx1Row(timestampRow).toString();
         df = df.withColumns(
@@ -504,9 +609,486 @@ export async function readMxs(filePath: string, mx1Df: DataFrame): Promise<DataF
         );
     }
 
-    return df;
+    // The snapshot type says what kind of state a record holds — "TIME" for a
+    // time step, others for extreme-value records. Under its raw datapoint name
+    // it is easy to miss among the columns, so it gets a plain one up front.
+    const snapshotRow = scalarChannel(mx1Records, "SNAPSHOTTYPE");
+    if (snapshotRow) {
+        df = df.withColumns(
+            pl.col(S3sDp.fromMx1Row(snapshotRow).toString()).alias("Snapshottype"),
+        );
+    }
+
+    return leadWith(df, ...CONTEXT_COLUMNS);
 }
 
+/** A vector channel that was found but not read, with the reason why. */
+export interface SkippedVectorChannel {
+    objType: string;
+    attrType: string;
+    reason: "rvec" | "length-mismatch" | "unsupported-datatype";
+    /** Number of values the MX1 channel declares. */
+    declaredItems: number;
+    /** Number of keys MX2 lists for the object type. */
+    keyCount: number;
+}
+
+export interface VectorReadOptions {
+    /**
+     * Throw instead of skipping when MX1 and MX2 disagree about how many values
+     * a channel holds. Off by default, so one inconsistent channel does not
+     * cost the other 144 — but a skipped channel is always reported through
+     * {@linkcode VectorReadOptions.onSkip}, never dropped in silence.
+     */
+    strict?: boolean;
+    /** Receives every channel that was skipped, in the order they were found. */
+    onSkip?: (skipped: SkippedVectorChannel) => void;
+}
+
+/**
+ * The key list MX2 holds for an object type — one key per vector position.
+ *
+ * @returns The keys in vector order, or `undefined` if the type has none.
+ */
+export function vectorKeys(mx2Df: DataFrame, objType: string): string[] | undefined {
+    for (const row of mx2Df.toRecords()) {
+        if (String(row.ObjType) !== objType) continue;
+        if (!MX2_KEY_ATTRS.includes(String(row.AttrType))) continue;
+        return (row.Data as unknown[]).map(String);
+    }
+    return undefined;
+}
+
+/** Object types that have vector channels and a key list to go with them. */
+export function vectorObjTypes(mx1Df: DataFrame, mx2Df: DataFrame): string[] {
+    const typen = new Set<string>();
+    for (const row of mx1Df.toRecords()) {
+        if (!row.isVectorChannel || row.isVectorChannelMx2Rvec) continue;
+        const typ = String(row.OBJTYPE);
+        if (vectorKeys(mx2Df, typ)) typen.add(typ);
+    }
+    return [...typen].sort();
+}
+
+/**
+ * Reads the vector channels of one object type from an MXS data file.
+ *
+ * A vector channel holds one value per object of its type — `KNOT~T` carries a
+ * temperature for all 11 143 nodes at once. MX2 supplies the keys in the same
+ * order, so value *i* of the vector belongs to key *i*.
+ *
+ * ### Why a long frame and not one column per object
+ *
+ * Named the way a scalar channel would be, the vector channels of a mid-sized
+ * network expand to well over half a million columns — for the reference model
+ * 592 300, of which `KNOT` alone accounts for 300 861. A frame that wide is
+ * technically possible but not usable, and it is the wrong shape besides.
+ *
+ * The result is therefore **long**: one row per time step and object, one
+ * column per attribute. For `KNOT` that is 52 × 11 143 rows and 27 attribute
+ * columns — the same values, in the shape a data frame is built for. The
+ * datapoint of a single value stays reconstructible from `OBJTYPE`,
+ * `OBJTYPE_PK` and the column name via {@linkcode S3sDp}.
+ *
+ * ### What is not read
+ *
+ * Channels flagged `isVectorChannelMx2Rvec` — for the reference model 9 `ROHR`
+ * channels such as `PVEC` and `TTRVEC` — hold one value per *pipe point*
+ * rather than per pipe. Mapping those needs `ROHR/N_OF_POINTS` from MX2 and is
+ * not implemented yet; they are reported through `onSkip`.
+ *
+ * @param filePath Path to the `.mxs` file.
+ * @param mx1Df Channel definitions from {@linkcode readMx1}.
+ * @param mx2Df Vector channel definitions from {@linkcode readMx2}.
+ * @param objType Object type to read, e.g. `"KNOT"`.
+ * @param options See {@linkcode VectorReadOptions}.
+ *
+ * @returns Long `DataFrame` with `OBJTYPE`, `OBJTYPE_PK`, one column per
+ *   attribute, and `Timestamp` if the file carries one.
+ *
+ * @throws `Error` if MX2 has no key list for `objType`, if the file is
+ *   truncated, or — with `strict` — if a channel's length disagrees with MX2.
+ */
+export async function readMxsVectors(
+    filePath: string,
+    mx1Df: DataFrame,
+    mx2Df: DataFrame,
+    objType: string,
+    options: VectorReadOptions = {},
+): Promise<DataFrame> {
+    const keys = vectorKeys(mx2Df, objType);
+    if (!keys) {
+        throw new Error(`MX2 holds no key list for object type "${objType}".`);
+    }
+    const keyCount = keys.length;
+
+    const mx1Records = mx1Df.toRecords();
+    const lastMx1 = mx1Records[mx1Records.length - 1];
+    const mxRecordLength = (lastMx1.DATAOFFSET as number) + (lastMx1.DATALENGTH as number);
+
+    // Which channels of this type can be mapped onto the key list.
+    const channels: Array<{ name: string; dataType: string; offset: number; itemLength: number }> =
+        [];
+    for (const row of mx1Records) {
+        if (!row.isVectorChannel || String(row.OBJTYPE) !== objType) continue;
+
+        const attrType = String(row.ATTRTYPE);
+        const declaredItems = row.NOfItems as number;
+        const melde = (reason: SkippedVectorChannel["reason"]) =>
+            options.onSkip?.({ objType, attrType, reason, declaredItems, keyCount });
+
+        if (row.isVectorChannelMx2Rvec) {
+            melde("rvec");
+            continue;
+        }
+        if (declaredItems !== keyCount) {
+            if (options.strict) {
+                throw new Error(
+                    `${objType}~${attrType}: MX1 declares ${declaredItems} values, ` +
+                        `MX2 lists ${keyCount} keys — cannot map them onto each other.`,
+                );
+            }
+            melde("length-mismatch");
+            continue;
+        }
+        if (!["REAL", "INT4", "CHAR"].includes(String(row.DATATYPE))) {
+            melde("unsupported-datatype");
+            continue;
+        }
+
+        channels.push({
+            name: attrType,
+            dataType: String(row.DATATYPE),
+            offset: row.DATAOFFSET as number,
+            itemLength: row.DATATYPELENGTH as number,
+        });
+    }
+
+    // Time stamp and snapshot type come from the scalar channels, same as in
+    // readMxs — they describe the record, so they apply to every object in it.
+    const timestampRow = scalarChannel(mx1Records, "TIMESTAMP");
+    const snapshotRow = scalarChannel(mx1Records, "SNAPSHOTTYPE");
+
+    const buffer = new Uint8Array(mxRecordLength);
+    const decoder = new TextDecoder("utf-8");
+    const zeitstempel: string[] = [];
+    const schnappschuss: string[] = [];
+    // Per record one block holding one array per channel; stitched together
+    // afterwards, because the number of records is not known in advance.
+    const bloecke: Array<Array<Float64Array | Int32Array | string[]>> = [];
+
+    const mxsFile = await Deno.open(filePath);
+    try {
+        while (true) {
+            const bytesRead = await readFull(mxsFile, buffer);
+            if (bytesRead === 0) break;
+            if (bytesRead !== mxRecordLength) {
+                throw new Error(
+                    `Truncated record: read ${bytesRead} bytes, expected ${mxRecordLength}.`,
+                );
+            }
+            const view = new DataView(buffer.buffer, buffer.byteOffset, bytesRead);
+
+            if (timestampRow) zeitstempel.push(charField(buffer, decoder, timestampRow));
+            if (snapshotRow) schnappschuss.push(charField(buffer, decoder, snapshotRow));
+
+            const block: Array<Float64Array | Int32Array | string[]> = [];
+            for (const channel of channels) {
+                if (channel.dataType === "REAL") {
+                    const spalte = new Float64Array(keyCount);
+                    for (let i = 0; i < keyCount; i++) {
+                        spalte[i] = view.getFloat32(channel.offset + i * channel.itemLength, true);
+                    }
+                    block.push(spalte);
+                } else if (channel.dataType === "INT4") {
+                    const spalte = new Int32Array(keyCount);
+                    for (let i = 0; i < keyCount; i++) {
+                        spalte[i] = view.getInt32(channel.offset + i * channel.itemLength, true);
+                    }
+                    block.push(spalte);
+                } else {
+                    const spalte: string[] = new Array(keyCount);
+                    for (let i = 0; i < keyCount; i++) {
+                        const von = channel.offset + i * channel.itemLength;
+                        spalte[i] = decoder.decode(buffer.subarray(von, von + channel.itemLength))
+                            .replace(/\0.*$/, "").replace(/\s+$/, "");
+                    }
+                    block.push(spalte);
+                }
+            }
+            bloecke.push(block);
+        }
+    } finally {
+        mxsFile.close();
+    }
+
+    const records = bloecke.length;
+    const zeilen = records * keyCount;
+
+    const spalten: Record<string, unknown> = {
+        OBJTYPE: new Array<string>(zeilen).fill(objType),
+        OBJTYPE_PK: Array.from({ length: zeilen }, (_, i) => keys[i % keyCount]),
+    };
+    channels.forEach((channel, spalteIndex) => {
+        if (channel.dataType === "CHAR") {
+            const ziel = new Array<string>(zeilen);
+            for (let r = 0; r < records; r++) {
+                const block = bloecke[r][spalteIndex] as string[];
+                for (let i = 0; i < keyCount; i++) ziel[r * keyCount + i] = block[i];
+            }
+            spalten[channel.name] = ziel;
+        } else {
+            const ziel = channel.dataType === "INT4"
+                ? new Int32Array(zeilen)
+                : new Float64Array(zeilen);
+            for (let r = 0; r < records; r++) {
+                ziel.set(bloecke[r][spalteIndex] as Float64Array & Int32Array, r * keyCount);
+            }
+            spalten[channel.name] = Array.from(ziel);
+        }
+    });
+
+    // Both describe the record as a whole, so every object of that record
+    // carries the same value.
+    if (timestampRow) {
+        spalten.Timestamp = Array.from(
+            { length: zeilen },
+            (_, i) => zeitstempel[Math.floor(i / keyCount)],
+        );
+    }
+    if (snapshotRow) {
+        spalten.Snapshottype = Array.from(
+            { length: zeilen },
+            (_, i) => schnappschuss[Math.floor(i / keyCount)],
+        );
+    }
+
+    let df = pl.DataFrame(spalten);
+    if (timestampRow) {
+        df = df.withColumns(
+            pl.col("Timestamp")
+                .str.strptime(pl.Datetime, "%Y-%m-%d %H:%M:%S%.6f%:z")
+                .cast(pl.Datetime("ms"))
+                .alias("Timestamp"),
+        );
+    }
+    return leadWith(df, ...CONTEXT_COLUMNS);
+}
+
+/**
+ * How many points each object of a type has, from MX2's `N_OF_POINTS` row.
+ *
+ * Read as numbers even though the row arrives as text: the `Data` column of the
+ * MX2 frame holds vectors of different types across its rows, and Polars gives
+ * a column one type — so the integer counts come back as `"4.0"` rather than
+ * `4`.
+ *
+ * @returns One count per object, in vector order, or `undefined` if the type
+ *   has no point counts.
+ */
+export function vectorPointCounts(mx2Df: DataFrame, objType: string): number[] | undefined {
+    for (const row of mx2Df.toRecords()) {
+        if (String(row.ObjType) !== objType) continue;
+        if (String(row.AttrType) !== MX2_POINT_COUNT_ATTR) continue;
+        return (row.Data as unknown[]).map(Number);
+    }
+    return undefined;
+}
+
+/** Object types that have RVEC channels and the point counts to resolve them. */
+export function vectorPointObjTypes(mx1Df: DataFrame, mx2Df: DataFrame): string[] {
+    const typen = new Set<string>();
+    for (const row of mx1Df.toRecords()) {
+        if (!row.isVectorChannelMx2Rvec) continue;
+        const typ = String(row.OBJTYPE);
+        if (vectorPointCounts(mx2Df, typ) && vectorKeys(mx2Df, typ)) typen.add(typ);
+    }
+    return [...typen].sort();
+}
+
+/**
+ * Reads the RVEC channels of one object type — values along each object.
+ *
+ * Where an ordinary vector channel carries one value per object, an RVEC
+ * channel carries one value per *point* of each object. For `ROHR` that means a
+ * value at every point along a pipe: the reference model has 11 128 pipes with
+ * between 2 and 136 points each, 42 514 in total, and channels such as `PVEC`
+ * or `TVEC` hold exactly that many values.
+ *
+ * The values of all objects lie end to end in one block. MX2's `N_OF_POINTS`
+ * says how many belong to each, so the block is cut accordingly: the first
+ * object takes the first *n₀* values, the next the following *n₁*, and so on.
+ * The counts must add up to the channel length — otherwise the cut would be
+ * guesswork, and the channel is skipped or, with `strict`, rejected.
+ *
+ * The result is long, one row per time step, object and point:
+ *
+ * | Column | Meaning |
+ * |---|---|
+ * | `OBJTYPE` | The object type, e.g. `"ROHR"` |
+ * | `OBJTYPE_PK` | Key of the object the point belongs to |
+ * | `POINT` | Position along that object, starting at 0 |
+ * | one per attribute | `PVEC`, `TVEC`, `SVEC` … |
+ * | `Timestamp` | If the file carries one |
+ *
+ * @param filePath Path to the `.mxs` file.
+ * @param mx1Df Channel definitions from {@linkcode readMx1}.
+ * @param mx2Df Vector channel definitions from {@linkcode readMx2}.
+ * @param objType Object type to read, e.g. `"ROHR"`.
+ * @param options See {@linkcode VectorReadOptions}.
+ *
+ * @returns Long `DataFrame` with one row per time step, object and point.
+ *
+ * @throws `Error` if MX2 lacks keys or point counts for `objType`, if the point
+ *   counts do not add up to the object count, if the file is truncated, or —
+ *   with `strict` — if a channel's length disagrees with the point counts.
+ */
+export async function readMxsVectorPoints(
+    filePath: string,
+    mx1Df: DataFrame,
+    mx2Df: DataFrame,
+    objType: string,
+    options: VectorReadOptions = {},
+): Promise<DataFrame> {
+    const keys = vectorKeys(mx2Df, objType);
+    if (!keys) throw new Error(`MX2 holds no key list for object type "${objType}".`);
+
+    const counts = vectorPointCounts(mx2Df, objType);
+    if (!counts) {
+        throw new Error(`MX2 holds no ${MX2_POINT_COUNT_ATTR} for object type "${objType}".`);
+    }
+    if (counts.length !== keys.length) {
+        throw new Error(
+            `${objType}: ${keys.length} keys but ${counts.length} point counts — MX2 is inconsistent.`,
+        );
+    }
+
+    const pointCount = counts.reduce((summe, n) => summe + n, 0);
+
+    // One entry per point: which object it belongs to and its position in it.
+    const punktSchluessel = new Array<string>(pointCount);
+    const punktIndex = new Int32Array(pointCount);
+    let p = 0;
+    for (let o = 0; o < keys.length; o++) {
+        for (let i = 0; i < counts[o]; i++, p++) {
+            punktSchluessel[p] = keys[o];
+            punktIndex[p] = i;
+        }
+    }
+
+    const mx1Records = mx1Df.toRecords();
+    const lastMx1 = mx1Records[mx1Records.length - 1];
+    const mxRecordLength = (lastMx1.DATAOFFSET as number) + (lastMx1.DATALENGTH as number);
+
+    const channels: Array<{ name: string; offset: number; itemLength: number }> = [];
+    for (const row of mx1Records) {
+        if (!row.isVectorChannelMx2Rvec || String(row.OBJTYPE) !== objType) continue;
+
+        const attrType = String(row.ATTRTYPE);
+        const declaredItems = row.NOfItems as number;
+        if (declaredItems !== pointCount) {
+            if (options.strict) {
+                throw new Error(
+                    `${objType}~${attrType}: MX1 declares ${declaredItems} values, ` +
+                        `${MX2_POINT_COUNT_ATTR} adds up to ${pointCount} — cannot cut them apart.`,
+                );
+            }
+            options.onSkip?.({
+                objType,
+                attrType,
+                reason: "length-mismatch",
+                declaredItems,
+                keyCount: pointCount,
+            });
+            continue;
+        }
+        channels.push({
+            name: attrType,
+            offset: row.DATAOFFSET as number,
+            itemLength: row.DATATYPELENGTH as number,
+        });
+    }
+
+    // Time stamp and snapshot type describe the record, so they apply to every
+    // point in it — same as in readMxs and readMxsVectors.
+    const timestampRow = scalarChannel(mx1Records, "TIMESTAMP");
+    const snapshotRow = scalarChannel(mx1Records, "SNAPSHOTTYPE");
+
+    const buffer = new Uint8Array(mxRecordLength);
+    const decoder = new TextDecoder("utf-8");
+    const zeitstempel: string[] = [];
+    const schnappschuss: string[] = [];
+    const bloecke: Float64Array[][] = [];
+
+    const mxsFile = await Deno.open(filePath);
+    try {
+        while (true) {
+            const bytesRead = await readFull(mxsFile, buffer);
+            if (bytesRead === 0) break;
+            if (bytesRead !== mxRecordLength) {
+                throw new Error(
+                    `Truncated record: read ${bytesRead} bytes, expected ${mxRecordLength}.`,
+                );
+            }
+            const view = new DataView(buffer.buffer, buffer.byteOffset, bytesRead);
+
+            if (timestampRow) zeitstempel.push(charField(buffer, decoder, timestampRow));
+            if (snapshotRow) schnappschuss.push(charField(buffer, decoder, snapshotRow));
+
+            const block: Float64Array[] = [];
+            for (const channel of channels) {
+                const spalte = new Float64Array(pointCount);
+                for (let i = 0; i < pointCount; i++) {
+                    spalte[i] = view.getFloat32(channel.offset + i * channel.itemLength, true);
+                }
+                block.push(spalte);
+            }
+            bloecke.push(block);
+        }
+    } finally {
+        mxsFile.close();
+    }
+
+    const records = bloecke.length;
+    const zeilen = records * pointCount;
+
+    const spalten: Record<string, unknown> = {
+        OBJTYPE: new Array<string>(zeilen).fill(objType),
+        OBJTYPE_PK: Array.from({ length: zeilen }, (_, i) => punktSchluessel[i % pointCount]),
+        POINT: Array.from({ length: zeilen }, (_, i) => punktIndex[i % pointCount]),
+    };
+    channels.forEach((channel, spalteIndex) => {
+        const ziel = new Float64Array(zeilen);
+        for (let r = 0; r < records; r++) ziel.set(bloecke[r][spalteIndex], r * pointCount);
+        spalten[channel.name] = Array.from(ziel);
+    });
+
+    // Both describe the record as a whole, so every point of that record
+    // carries the same value.
+    if (timestampRow) {
+        spalten.Timestamp = Array.from(
+            { length: zeilen },
+            (_, i) => zeitstempel[Math.floor(i / pointCount)],
+        );
+    }
+    if (snapshotRow) {
+        spalten.Snapshottype = Array.from(
+            { length: zeilen },
+            (_, i) => schnappschuss[Math.floor(i / pointCount)],
+        );
+    }
+
+    let df = pl.DataFrame(spalten);
+    if (timestampRow) {
+        df = df.withColumns(
+            pl.col("Timestamp")
+                .str.strptime(pl.Datetime, "%Y-%m-%d %H:%M:%S%.6f%:z")
+                .cast(pl.Datetime("ms"))
+                .alias("Timestamp"),
+        );
+    }
+    return leadWith(df, ...CONTEXT_COLUMNS);
+}
 
 /**
  * The fields of a datapoint, in the order they appear in its string form.
@@ -529,6 +1111,25 @@ const DP_NAME_FIELDS = ["NAME1", "NAME2", "NAME3"] as const;
 const DP_SEPARATOR = "~";
 
 /** Name of one field of an {@linkcode S3sDp}. */
+/**
+ * Attribute names under which MX2 stores the key list of an object type.
+ *
+ * Every object type that has vector channels carries exactly one such row,
+ * holding one key per vector position. `ROHR/N_OF_POINTS` is *not* one of them:
+ * it describes how many points each pipe has and belongs to the RVEC channels,
+ * which are not read yet.
+ */
+const MX2_KEY_ATTRS = ["tk", "pk"];
+
+/**
+ * MX2 attribute holding how many points each object of a type has.
+ *
+ * Only `ROHR` carries this. It is what turns an RVEC channel — one value per
+ * pipe *point* — into something addressable: the values of all pipes lie
+ * end to end, and this row says where one pipe stops and the next begins.
+ */
+const MX2_POINT_COUNT_ATTR = "N_OF_POINTS";
+
 export type S3sDpField = (typeof DP_FIELDS)[number];
 
 /** The six fields that identify a datapoint. */
