@@ -6,7 +6,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
     <title>Documentation &#8212; pnhjs 0.0.1 documentation</title>
-    <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=61cd365c" />
+    <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=5ecbeea2" />
     <link rel="stylesheet" type="text/css" href="_static/alabaster.css?v=12dfc556" />
     <script src="_static/documentation_options.js?v=d45e8c67"></script>
     <script src="_static/doctools.js?v=9a2dae69"></script>
@@ -42,51 +42,44 @@ GitHub Pages.</p>
 <h2>Sources<a class="headerlink" href="#sources" title="Link to this heading">¶</a></h2>
 <p>All documentation lives in the <code class="docutils literal notranslate"><span class="pre">docs</span></code> directory of the repository:</p>
 <div class="highlight-text notranslate"><div class="highlight"><pre><span></span>docs/
-  conf.py        Sphinx configuration (project, theme, extensions)
-  index.rst      landing page and toctree
-  docs.rst       this page
+  conf.py           Sphinx configuration (project, theme, extensions)
+  requirements.txt  pinned build dependencies
+  index.rst         landing page and toctree
+  docs.rst          this page
   ... other .rst files for the various pages
-  make.bat       build entry point (Windows)
-  _build/html/   generated site
+  make.bat          build entry point (Windows)
+  _build/html/      local preview only, not in the repository
 </pre></div>
 </div>
 <p>A new page is added by creating a <code class="docutils literal notranslate"><span class="pre">&lt;name&gt;.rst</span></code> file and listing
 <code class="docutils literal notranslate"><span class="pre">&lt;name&gt;</span></code> in the <code class="docutils literal notranslate"><span class="pre">toctree</span></code> of <code class="docutils literal notranslate"><span class="pre">index.rst</span></code>.</p>
 </section>
-<section id="building-locally">
-<h2>Building locally<a class="headerlink" href="#building-locally" title="Link to this heading">¶</a></h2>
-<p>The site is generated locally — on Windows:</p>
-<div class="highlight-bat notranslate"><div class="highlight"><pre><span></span><span class="k">cd</span> docs
-.\make.bat html
-</pre></div>
-</div>
-<p>Sphinx writes the result to <code class="docutils literal notranslate"><span class="pre">docs/_build/html</span></code>; <code class="docutils literal notranslate"><span class="pre">index.html</span></code> in that
-folder can be opened directly in a browser to preview the site before
-pushing.</p>
-</section>
 <section id="publishing-to-github-pages">
 <h2>Publishing to GitHub Pages<a class="headerlink" href="#publishing-to-github-pages" title="Link to this heading">¶</a></h2>
-<p>Publishing is automated by the GitHub Actions workflow
-<code class="docutils literal notranslate"><span class="pre">.github/workflows/docspublish.yml</span></code>:</p>
-<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Publish already generated Sphinx Docs to GitHub Pages</span>
-
-<span class="nt">on</span><span class="p">:</span>
+<p><strong>Editing a source file and pushing is enough.</strong> The workflow
+<code class="docutils literal notranslate"><span class="pre">.github/workflows/docspublish.yml</span></code> builds the documentation itself:</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">on</span><span class="p">:</span>
 <span class="w">  </span><span class="nt">push</span><span class="p">:</span>
 <span class="w">    </span><span class="nt">branches</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">main</span><span class="p p-Indicator">]</span>
-
-<span class="nt">permissions</span><span class="p">:</span>
-<span class="w">  </span><span class="nt">contents</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">write</span>
+<span class="w">  </span><span class="nt">workflow_dispatch</span><span class="p">:</span>
 
 <span class="nt">jobs</span><span class="p">:</span>
-<span class="w">  </span><span class="nt">deploy</span><span class="p">:</span>
-<span class="w">    </span><span class="nt">runs-on</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">windows-latest</span>
+<span class="w">  </span><span class="nt">build-and-deploy</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">runs-on</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">ubuntu-latest</span>
 
 <span class="w">    </span><span class="nt">steps</span><span class="p">:</span>
-<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Checkout repo</span>
-<span class="w">        </span><span class="nt">uses</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">actions/checkout@v4</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">uses</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">actions/checkout@v4</span>
 
-<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Deploy to GitHub Pages</span>
-<span class="w">        </span><span class="nt">uses</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">peaceiris/actions-gh-pages@v4</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">uses</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">actions/setup-python@v5</span>
+<span class="w">        </span><span class="nt">with</span><span class="p">:</span>
+<span class="w">          </span><span class="nt">python-version</span><span class="p">:</span><span class="w"> </span><span class="s">"3.12"</span>
+<span class="w">          </span><span class="nt">cache</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">pip</span>
+<span class="w">          </span><span class="nt">cache-dependency-path</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">docs/requirements.txt</span>
+
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">run</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">pip install -r docs/requirements.txt</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">run</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">sphinx-build -b html -d docs/_build/doctrees docs docs/_build/html</span>
+
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">uses</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">peaceiris/actions-gh-pages@v4</span>
 <span class="w">        </span><span class="nt">with</span><span class="p">:</span>
 <span class="w">          </span><span class="nt">github_token</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">${{ secrets.GITHUB_TOKEN }}</span>
 <span class="w">          </span><span class="nt">publish_dir</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">./docs/_build/html</span>
@@ -96,13 +89,20 @@ pushing.</p>
 <p>What happens on every push to <code class="docutils literal notranslate"><span class="pre">main</span></code>:</p>
 <ol class="arabic simple">
 <li><p>The workflow is triggered by the <code class="docutils literal notranslate"><span class="pre">push</span></code> event on the <code class="docutils literal notranslate"><span class="pre">main</span></code>
-branch.</p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">actions/checkout&#64;v4</span></code> checks out the repository, including the
-generated HTML in <code class="docutils literal notranslate"><span class="pre">docs/_build/html</span></code>.</p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">peaceiris/actions-gh-pages&#64;v4</span></code> takes the contents of
-<code class="docutils literal notranslate"><span class="pre">publish_dir</span></code> and force-pushes them to the <code class="docutils literal notranslate"><span class="pre">gh-pages</span></code> branch,
-authenticated with the automatically provided <code class="docutils literal notranslate"><span class="pre">GITHUB_TOKEN</span></code>.
-<code class="docutils literal notranslate"><span class="pre">permissions:</span> <span class="pre">contents:</span> <span class="pre">write</span></code> is what allows that push.</p></li>
+branch. <code class="docutils literal notranslate"><span class="pre">workflow_dispatch</span></code> additionally allows a rebuild without a
+commit, from the <em>Actions</em> tab.</p></li>
+<li><p>Python is set up and Sphinx installed from <code class="docutils literal notranslate"><span class="pre">docs/requirements.txt</span></code>.
+The pip cache is keyed on that file, so an unchanged dependency set
+costs no download.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">sphinx-build</span></code> generates the site into <code class="docutils literal notranslate"><span class="pre">docs/_build/html</span></code> — inside
+the runner, not in the repository. <code class="docutils literal notranslate"><span class="pre">-d</span></code> puts the intermediate
+doctrees <em>beside</em> the site rather than inside it; by default they
+land in the output folder and would be published along with it, at
+290 KB more than the site itself weighs.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">peaceiris/actions-gh-pages&#64;v4</span></code> force-pushes that folder to the
+<code class="docutils literal notranslate"><span class="pre">gh-pages</span></code> branch, authenticated with the automatically provided
+<code class="docutils literal notranslate"><span class="pre">GITHUB_TOKEN</span></code>. <code class="docutils literal notranslate"><span class="pre">permissions:</span> <span class="pre">contents:</span> <span class="pre">write</span></code> is what allows the
+push.</p></li>
 <li><p>Since Jekyll processing is not enabled, the action also writes a
 <code class="docutils literal notranslate"><span class="pre">.nojekyll</span></code> marker. This is essential for Sphinx output, because
 GitHub Pages would otherwise ignore the <code class="docutils literal notranslate"><span class="pre">_static</span></code> and <code class="docutils literal notranslate"><span class="pre">_sources</span></code>
@@ -110,22 +110,49 @@ directories whose names start with an underscore.</p></li>
 <li><p>GitHub Pages serves the <code class="docutils literal notranslate"><span class="pre">gh-pages</span></code> branch at
 <a class="reference external" href="https://kiawx.github.io/pnhjs/">https://kiawx.github.io/pnhjs/</a>.</p></li>
 </ol>
-<p><strong>Sphinx itself does not run in CI.</strong> As the workflow name states, it
-publishes <em>already generated</em> docs. The build output in
-<code class="docutils literal notranslate"><span class="pre">docs/_build/html</span></code> is therefore committed to the repository and must
-be rebuilt locally before pushing — otherwise a source change is pushed
-while the published site still shows the previous state.</p>
+<section id="why-the-generated-html-is-not-in-the-repository">
+<h3>Why the generated HTML is not in the repository<a class="headerlink" href="#why-the-generated-html-is-not-in-the-repository" title="Link to this heading">¶</a></h3>
+<p>It used to be. The workflow only deployed what it found, so every push
+had to be preceded by a local <code class="docutils literal notranslate"><span class="pre">make.bat</span> <span class="pre">html</span></code> — and forgetting it did
+not fail. The workflow ran, reported success, and published the previous
+state. A silent staleness is worse than a broken build.</p>
+<p>Building in CI removes the step that could be forgotten. As a
+side effect the noise disappears too: a one-line change to a <code class="docutils literal notranslate"><span class="pre">.rst</span></code>
+file no longer drags a few hundred changed lines of generated HTML,
+<code class="docutils literal notranslate"><span class="pre">searchindex.js</span></code> and pickled doctrees through the diff.</p>
+<p><code class="docutils literal notranslate"><span class="pre">docs/_build/</span></code> is therefore in <code class="docutils literal notranslate"><span class="pre">.gitignore</span></code>.</p>
+<p>The dependencies are pinned in <code class="docutils literal notranslate"><span class="pre">docs/requirements.txt</span></code> so that CI
+produces the same pages as a local build. Alabaster is pinned alongside
+Sphinx although it is only a dependency of it: it determines the
+appearance and the shipped CSS, so a theme update alone could change the
+output.</p>
+</section>
+</section>
+<section id="building-locally">
+<h2>Building locally<a class="headerlink" href="#building-locally" title="Link to this heading">¶</a></h2>
+<p>Only needed to preview before pushing — the published site does not
+depend on it. On Windows:</p>
+<div class="highlight-bat notranslate"><div class="highlight"><pre><span></span><span class="k">cd</span> docs
+.\make.bat html
+</pre></div>
+</div>
+<p>Sphinx writes the result to <code class="docutils literal notranslate"><span class="pre">docs/_build/html</span></code>; <code class="docutils literal notranslate"><span class="pre">index.html</span></code> in that
+folder can be opened directly in a browser. To reproduce exactly what CI
+does, run the same command it does, from the repository root:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>sphinx-build<span class="w"> </span>-b<span class="w"> </span>html<span class="w"> </span>-d<span class="w"> </span>docs/_build/doctrees<span class="w"> </span>docs<span class="w"> </span>docs/_build/html
+</pre></div>
+</div>
+<p><code class="docutils literal notranslate"><span class="pre">make.bat</span></code> looks for <code class="docutils literal notranslate"><span class="pre">sphinx-build</span></code> on the <code class="docutils literal notranslate"><span class="pre">PATH</span></code>. If Sphinx lives
+in an environment that is not on it, point the <code class="docutils literal notranslate"><span class="pre">SPHINXBUILD</span></code>
+environment variable at the executable.</p>
 </section>
 <section id="typical-workflow">
 <h2>Typical workflow<a class="headerlink" href="#typical-workflow" title="Link to this heading">¶</a></h2>
 <ol class="arabic simple">
 <li><p><strong>Edit</strong> or add the relevant <code class="docutils literal notranslate"><span class="pre">.rst</span></code> file in <code class="docutils literal notranslate"><span class="pre">docs</span></code>.</p></li>
-<li><p><strong>Build</strong> locally with <code class="docutils literal notranslate"><span class="pre">.\make.bat</span> <span class="pre">html</span></code> and check the result in
-<code class="docutils literal notranslate"><span class="pre">docs/_build/html/index.html</span></code>.</p></li>
-<li><p><strong>Commit</strong> both the sources and the regenerated output under
-<code class="docutils literal notranslate"><span class="pre">docs/_build/html</span></code>.</p></li>
-<li><p><strong>Push</strong> to <code class="docutils literal notranslate"><span class="pre">main</span></code>.</p></li>
-<li><p>The workflow deploys to <code class="docutils literal notranslate"><span class="pre">gh-pages</span></code>; the updated page is live at
+<li><p><strong>Preview</strong> locally if wanted — optional.</p></li>
+<li><p><strong>Commit</strong> the source change and <strong>push</strong> to <code class="docutils literal notranslate"><span class="pre">main</span></code>.</p></li>
+<li><p>The workflow builds and deploys; the updated page is live at
 <a class="reference external" href="https://kiawx.github.io/pnhjs/">https://kiawx.github.io/pnhjs/</a> shortly afterwards. The run can be
 followed in the <em>Actions</em> tab of the repository.</p></li>
 </ol>
@@ -136,6 +163,9 @@ followed in the <em>Actions</em> tab of the repository.</p></li>
 <li><p>The theme is <code class="docutils literal notranslate"><span class="pre">alabaster</span></code>, and <code class="docutils literal notranslate"><span class="pre">extensions</span></code> in <code class="docutils literal notranslate"><span class="pre">conf.py</span></code> is
 currently empty — the documentation is hand-written, no API reference
 is generated from the TypeScript sources.</p></li>
+<li><p>The build does not use <code class="docutils literal notranslate"><span class="pre">-W</span></code>, so a Sphinx warning does not fail the
+deploy. Turning it on would catch broken references at the cost of a
+failed publish for every warning.</p></li>
 <li><p>The publish of the <code class="docutils literal notranslate"><span class="pre">&#64;pnh/sir3sjs</span></code> package to JSR is <em>not</em> automated
 and is carried out manually via the Deno CLI, see
 <a class="reference internal" href="sir3sjs.html"><span class="doc">SIR 3S MX in JS</span></a>.</p></li>
@@ -166,8 +196,8 @@ and is carried out manually via the Deno CLI, see
 <li class="toctree-l1"><a class="reference internal" href="sir3sjs.html">SIR 3S MX in JS</a></li>
 <li class="toctree-l1 current"><a class="current reference internal" href="#">Documentation</a><ul>
 <li class="toctree-l2"><a class="reference internal" href="#sources">Sources</a></li>
-<li class="toctree-l2"><a class="reference internal" href="#building-locally">Building locally</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#publishing-to-github-pages">Publishing to GitHub Pages</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#building-locally">Building locally</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#typical-workflow">Typical workflow</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#notes">Notes</a></li>
 </ul>
