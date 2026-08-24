@@ -159,11 +159,39 @@ understands its types natively. The price is that the reference is a
 separate site rather than Sphinx pages, which for a link from one page
 is a fair trade.
 
-There is also ``deno doc --lint``, which reports undocumented or
-unresolvable symbols. It is *not* wired into the workflow: it flags every
-signature that mentions polars' ``DataFrame``, because that type is not
-re-exported from this module. Since returning polars data frames is the
-whole point, the finding is structural rather than a defect.
+Completeness is checked
+~~~~~~~~~~~~~~~~~~~~~~~
+
+``deno doc --lint`` reports exported symbols without a JSDoc comment.
+The workflow runs it before generating the reference, so an undocumented
+export fails the build:
+
+.. code-block:: bash
+
+   deno doc --lint sir3sjs/mx.ts > doclint.txt 2>&1 || true
+   if grep -A2 'error\[missing-jsdoc\]' doclint.txt \
+      | grep -qE '^[[:space:]]*-->.*sir3sjs[/\\]mx\.ts'; then
+     exit 1
+   fi
+
+Two details that are easy to get wrong: ``NO_COLOR=1`` is set for the
+step, because Deno otherwise wraps the locations in ANSI sequences that
+the pattern misses; and the path separator is left open, because Deno
+reports paths in the notation of the operating system.
+
+Why only ``missing-jsdoc``
+^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+The lint also emits ten ``private-type-ref`` findings: every reader
+returns a Polars ``DataFrame``, a type this module does not re-export.
+Re-exporting it silences them — and pulls the entire type landscape of
+``nodejs-polars`` into the generated reference, taking it from 67 pages
+and 1.4 MB to 151 pages and 4.7 MB.
+
+Returning Polars data frames is the point of the module, so the finding
+is structural rather than a defect, and tripling the published site to
+silence it is not a good trade. The check is therefore narrowed to the
+part that catches real omissions.
 
 Notes
 -----

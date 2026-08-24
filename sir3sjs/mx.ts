@@ -15,6 +15,12 @@
 import { XMLParser } from "fast-xml-parser";
 import { pl, type DataFrame } from "nodejs-polars";
 
+// `DataFrame` wird bewusst *nicht* re-exportiert. Es würde zwar die
+// private-type-ref-Meldungen von `deno doc --lint` verstummen lassen, zieht
+// aber die gesamte Typenlandschaft von nodejs-polars in die erzeugte
+// API-Referenz: 151 statt 68 Seiten, 4,7 statt 1,4 MB. Der Lint prüft deshalb
+// gezielt nur auf fehlende Kommentare — siehe .github/workflows/docspublish.yml.
+
 /** The files that make up an SIR 3S MX result. */
 export type MxFiles = {
     /** .xml: SirCalc file (XML). */
@@ -128,10 +134,16 @@ export class MxResult {
 
     /**
      * The datapoint strings of all scalar channels — the column names of
-     * {@linkcode MxResult.mxs \| mxs} without the derived `Timestamp` column.
+     * {@linkcode MxResult.mxs \| mxs} without the derived context columns.
+     *
+     * `Timestamp` and `Snapshottype` describe the record rather than an object
+     * and carry no datapoint string, so they are left out. Filtering against
+     * the shared list keeps this correct when another such column is added —
+     * checking for `Timestamp` alone let `Snapshottype` slip into the datapoint
+     * list the moment it appeared.
      */
     get dpStrs(): string[] {
-        return this.mxs.columns.filter((column) => column !== "Timestamp");
+        return this.mxs.columns.filter((column) => !CONTEXT_COLUMNS.includes(column));
     }
 
     /**
@@ -505,7 +517,16 @@ function scalarChannel(
     return mx1Records.find((r) => r.ATTRTYPE === attrType && !r.isVectorChannel);
 }
 
-// '12s12s4si28xi'
+/**
+ * Unpacks the 64-byte header of an MX2 record.
+ *
+ * The layout corresponds to the Python struct format `12s12s4si28xi`: three
+ * fixed-length text fields, the byte size of one item, 28 unused bytes, and the
+ * byte size of the whole data block that follows the header.
+ *
+ * @param record The 64 header bytes of one MX2 record.
+ * @returns Object type, attribute type, data type and the two sizes.
+ */
 export function unpackRecord(record: Uint8Array): { ObjType: string; AttrType: string; DataType: string; DataTypeLength: number; DataLength: number } {
     const view = new DataView(record.buffer, record.byteOffset, record.byteLength);
     const decoder = new TextDecoder("utf-8");
@@ -624,8 +645,20 @@ export async function readMxs(filePath: string, mx1Df: DataFrame): Promise<DataF
 
 /** A vector channel that was found but not read, with the reason why. */
 export interface SkippedVectorChannel {
+    /** Object type of the channel, e.g. `"ROHR"`. */
     objType: string;
+    /** Attribute type of the channel, e.g. `"PVEC"`. */
     attrType: string;
+    /**
+     * Why it was skipped.
+     *
+     * `rvec` — one value per object *point*; read with
+     * {@linkcode readMxsVectorPoints} instead.
+     * `length-mismatch` — MX1 and MX2 disagree about how many values there are,
+     * so mapping them onto each other would be guesswork.
+     * `unsupported-datatype` — the channel holds something other than `REAL`,
+     * `INT4` or `CHAR`.
+     */
     reason: "rvec" | "length-mismatch" | "unsupported-datatype";
     /** Number of values the MX1 channel declares. */
     declaredItems: number;
@@ -633,6 +666,7 @@ export interface SkippedVectorChannel {
     keyCount: number;
 }
 
+/** How to handle channels that cannot be mapped — see {@linkcode readMxsVectors}. */
 export interface VectorReadOptions {
     /**
      * Throw instead of skipping when MX1 and MX2 disagree about how many values
@@ -1102,7 +1136,28 @@ export async function readMxsVectorPoints(
  * {@linkcode S3sDp.fromString} and {@linkcode S3sDp.toString} rather than take
  * the format apart itself.
  */
-const DP_FIELDS = ["OBJTYPE", "NAME1", "NAME2", "NAME3", "ATTRTYPE", "OBJTYPE_PK"] as const;
+const DP_FIELDS = [
+    "OBJTYPE",
+    "NAME1",
+    "NAME2",
+    "NAME3",
+    "ATTRTYPE",
+    "OBJTYPE_PK",
+] as const satisfies readonly S3sDpField[];
+
+/**
+ * Guards that {@linkcode DP_FIELDS} and {@linkcode S3sDpField} name exactly the
+ * same fields.
+ *
+ * `satisfies` above already rejects a name that is not a field. This covers the
+ * other direction: a field of the type that is missing from the array makes
+ * `Exclude` non-empty, the type resolve to `never`, and the assignment fail to
+ * compile. The field names therefore appear twice in the source but cannot
+ * drift apart.
+ */
+type DpFieldsAreComplete = Exclude<S3sDpField, (typeof DP_FIELDS)[number]> extends never ? true
+    : never;
+const _dpFieldsAreComplete: DpFieldsAreComplete = true;
 
 /** The name fields — the only ones that may be empty and are then left out. */
 const DP_NAME_FIELDS = ["NAME1", "NAME2", "NAME3"] as const;
@@ -1110,7 +1165,6 @@ const DP_NAME_FIELDS = ["NAME1", "NAME2", "NAME3"] as const;
 /** Separator between the fields of a datapoint string. */
 const DP_SEPARATOR = "~";
 
-/** Name of one field of an {@linkcode S3sDp}. */
 /**
  * Attribute names under which MX2 stores the key list of an object type.
  *
@@ -1130,7 +1184,21 @@ const MX2_KEY_ATTRS = ["tk", "pk"];
  */
 const MX2_POINT_COUNT_ATTR = "N_OF_POINTS";
 
-export type S3sDpField = (typeof DP_FIELDS)[number];
+/**
+ * Name of one field of an {@linkcode S3sDp}.
+ *
+ * Written out rather than derived from {@linkcode DP_FIELDS}: that array is
+ * module-private, and a public type must not lean on something callers cannot
+ * see. The two are kept in step by the compiler — see the checks next to
+ * `DP_FIELDS` — so naming the fields twice cannot let them drift apart.
+ */
+export type S3sDpField =
+    | "OBJTYPE"
+    | "NAME1"
+    | "NAME2"
+    | "NAME3"
+    | "ATTRTYPE"
+    | "OBJTYPE_PK";
 
 /** The six fields that identify a datapoint. */
 export type S3sDpFields = Readonly<Record<S3sDpField, string>>;
@@ -1168,13 +1236,29 @@ export type S3sDpFields = Readonly<Record<S3sDpField, string>>;
  * ```
  */
 export class S3sDp {
+    /** Object type, e.g. `"KNOT"` for a node or `"ROHR"` for a pipe. */
     readonly OBJTYPE: string;
+    /** Attribute type — what is measured, e.g. `"PH"` or `"T"`. */
     readonly ATTRTYPE: string;
+    /** First name of the object. Empty for vector channels. */
     readonly NAME1: string;
+    /** Second name — set where an object has two ends, e.g. a heat exchanger. */
     readonly NAME2: string;
+    /** Third name. Empty in every channel of the reference model. */
     readonly NAME3: string;
+    /** Technical key of the object, unique within its type. */
     readonly OBJTYPE_PK: string;
 
+    /**
+     * Builds a datapoint from its six fields.
+     *
+     * Usually not called directly — {@linkcode S3sDp.fromString} and
+     * {@linkcode S3sDp.fromMx1Row} cover the cases that occur while reading a
+     * result. It is public because a datapoint sometimes has to be assembled by
+     * hand, for instance to name a single value out of a vector channel.
+     *
+     * @param fields All six fields; names that do not apply are empty strings.
+     */
     constructor(fields: S3sDpFields) {
         this.OBJTYPE = fields.OBJTYPE;
         this.ATTRTYPE = fields.ATTRTYPE;

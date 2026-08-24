@@ -54,6 +54,32 @@ jobs:
         with:
           deno-version: v2.x
 
+      # Prueft, ob jedes exportierte Symbol einen JSDoc-Kommentar hat.
+      #
+      # Gewertet wird nur `missing-jsdoc`, und nur wenn die Fundstelle auf
+      # unseren eigenen Quelltext zeigt. Die uebrigen Meldungen von
+      # `deno doc --lint` sind `private-type-ref` auf polars' `DataFrame`:
+      # unvermeidbar, solange dieses Modul Polars-Datenrahmen zurueckgibt, und
+      # abstellbar nur durch einen Re-Export, der die erzeugte API-Referenz von
+      # 1,4 auf 4,7 MB aufblaeht. Der Tausch lohnt nicht.
+      - name: API-Dokumentation pruefen
+        env:
+          # Ohne das umgibt Deno die Fundstellen mit ANSI-Sequenzen, an denen
+          # das Muster unten vorbeigreift.
+          NO_COLOR: "1"
+        run: |
+          deno doc --lint sir3sjs/mx.ts > doclint.txt 2>&1 || true
+          # -A2, weil die Fundstelle in der Zeile unter der Fehlermeldung steht.
+          # Pfadtrenner offen halten: Deno meldet den Pfad in der Schreibweise
+          # des Betriebssystems, unter Windows also mit Backslash.
+          if grep -A2 'error\[missing-jsdoc\]' doclint.txt \
+             | grep -qE '^[[:space:]]*-->.*sir3sjs[/\\]mx\.ts'; then
+            echo "::error::Exportierte Symbole ohne JSDoc in sir3sjs/mx.ts"
+            grep -A2 'error\[missing-jsdoc\]' doclint.txt | grep -E 'error|-->'
+            exit 1
+          fi
+          echo "Alle exportierten Symbole in sir3sjs/mx.ts sind dokumentiert."
+
       # Die API-Referenz entsteht aus den JSDoc-Kommentaren im Quelltext und
       # landet als Unterverzeichnis in der fertigen Seite. Muss nach dem
       # Sphinx-Lauf kommen, weil dieser das Ausgabeverzeichnis anlegt.
