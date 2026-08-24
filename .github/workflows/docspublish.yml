@@ -42,8 +42,26 @@ jobs:
       # -d legt die Zwischendateien neben die Seite statt hinein. Ohne das
       # landen rund 290 KB gepickelter Build-Cache mit auf gh-pages — mehr,
       # als die Seite selbst wiegt.
+      #
+      # -W macht jede Sphinx-Warnung zum Fehler, --keep-going zeigt dabei alle
+      # statt nur der ersten. Ein toter Querverweis bricht damit die
+      # Veröffentlichung, statt unbemerkt online zu gehen.
       - name: Dokumentation bauen
-        run: sphinx-build -b html -d docs/_build/doctrees docs docs/_build/html
+        run: sphinx-build -W --keep-going -b html -d docs/_build/doctrees docs docs/_build/html
+
+      - name: Deno einrichten
+        uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+
+      # Die API-Referenz entsteht aus den JSDoc-Kommentaren im Quelltext und
+      # landet als Unterverzeichnis in der fertigen Seite. Muss nach dem
+      # Sphinx-Lauf kommen, weil dieser das Ausgabeverzeichnis anlegt.
+      - name: API-Referenz erzeugen
+        run: >
+          deno doc --html --name="sir3sjs"
+          --output=docs/_build/html/api
+          sir3sjs/mx.ts
 
       - name: Nach GitHub Pages veröffentlichen
         uses: peaceiris/actions-gh-pages@v4

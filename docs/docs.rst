@@ -5,9 +5,9 @@ This documentation is written in reStructuredText, built with
 `Sphinx <https://www.sphinx-doc.org/>`_ and published automatically to
 GitHub Pages.
 
-`pnhjs documentation <https://kiawx.github.io/pnhjs/index.html>`_
+`pnhjs on GitHub Pages: https://kiawx.github.io/pnhjs <https://kiawx.github.io/pnhjs/index.html>`_
 
-`SIR3SJS on JSR <https://jsr.io/@pnh/sir3sjs>`_
+`SIR3SJS on JSR: https://jsr.io/@pnh/sir3sjs  <https://jsr.io/@pnh/sir3sjs>`_
 
 Sources
 -------
@@ -22,8 +22,6 @@ All documentation lives in the ``docs`` directory of the repository:
      index.rst         landing page and toctree
      docs.rst          this page
      ... other .rst files for the various pages
-     make.bat          build entry point (Windows)
-     _build/html/      local preview only, not in the repository
 
 A new page is added by creating a ``<name>.rst`` file and listing
 ``<name>`` in the ``toctree`` of ``index.rst``.
@@ -87,27 +85,6 @@ What happens on every push to ``main``:
 6. GitHub Pages serves the ``gh-pages`` branch at
    https://kiawx.github.io/pnhjs/.
 
-Why the generated HTML is not in the repository
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-It used to be. The workflow only deployed what it found, so every push
-had to be preceded by a local ``make.bat html`` — and forgetting it did
-not fail. The workflow ran, reported success, and published the previous
-state. A silent staleness is worse than a broken build.
-
-Building in CI removes the step that could be forgotten. As a
-side effect the noise disappears too: a one-line change to a ``.rst``
-file no longer drags a few hundred changed lines of generated HTML,
-``searchindex.js`` and pickled doctrees through the diff.
-
-``docs/_build/`` is therefore in ``.gitignore``.
-
-The dependencies are pinned in ``docs/requirements.txt`` so that CI
-produces the same pages as a local build. Alabaster is pinned alongside
-Sphinx although it is only a dependency of it: it determines the
-appearance and the shipped CSS, so a theme update alone could change the
-output.
-
 Building locally
 ----------------
 
@@ -141,15 +118,62 @@ Typical workflow
    https://kiawx.github.io/pnhjs/ shortly afterwards. The run can be
    followed in the *Actions* tab of the repository.
 
+API reference
+-------------
+
+The pages you are reading are hand-written. The **API reference** is
+generated from the JSDoc comments in the TypeScript sources and lives
+alongside them:
+
+`API reference for sir3sjs <api/index.html>`_
+
+It is produced by ``deno doc``, which reads TypeScript directly — no
+extra toolchain, no second source of truth. Every exported symbol gets
+its own page, with types, signatures and the surrounding prose from the
+comment; the generated site brings its own search and a dark mode.
+
+The workflow runs it after the Sphinx build, into the ``api``
+subdirectory of the finished site:
+
+.. code-block:: bash
+
+   deno doc --html --name="sir3sjs" --output=docs/_build/html/api sir3sjs/mx.ts
+
+Locally the same is available as a task:
+
+.. code-block:: bash
+
+   deno task docs:api
+
+The order matters: Sphinx creates the output directory, ``deno doc``
+writes into it afterwards.
+
+Why ``deno doc`` and not a Sphinx extension
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Pulling TypeScript into Sphinx itself is possible — ``sphinx-js`` does
+it via TypeDoc — but it means a Node toolchain, a TypeDoc version, and
+an extension version that all have to keep agreeing with each other.
+``deno doc`` ships with the runtime this project already uses and
+understands its types natively. The price is that the reference is a
+separate site rather than Sphinx pages, which for a link from one page
+is a fair trade.
+
+There is also ``deno doc --lint``, which reports undocumented or
+unresolvable symbols. It is *not* wired into the workflow: it flags every
+signature that mentions polars' ``DataFrame``, because that type is not
+re-exported from this module. Since returning polars data frames is the
+whole point, the finding is structural rather than a defect.
+
 Notes
 -----
 
-* The theme is ``alabaster``, and ``extensions`` in ``conf.py`` is
-  currently empty — the documentation is hand-written, no API reference
-  is generated from the TypeScript sources.
-* The build does not use ``-W``, so a Sphinx warning does not fail the
-  deploy. Turning it on would catch broken references at the cost of a
-  failed publish for every warning.
+* The theme is ``alabaster`` and ``extensions`` in ``conf.py`` is empty —
+  the prose pages need no Sphinx extension, and the API reference is
+  generated separately, see above.
+* The build uses ``-W --keep-going``: every Sphinx warning is an error,
+  and all of them are shown rather than just the first. A broken
+  cross-reference fails the deploy instead of quietly going live.
 * The publish of the ``@pnh/sir3sjs`` package to JSR is *not* automated
   and is carried out manually via the Deno CLI, see
   :doc:`sir3sjs`.

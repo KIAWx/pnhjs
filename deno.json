@@ -7,7 +7,8 @@
     "include": ["sir3sjs/mx.ts", "deno.json"]
   },
   "tasks": {
-    "dev": "deno run --allow-read --allow-ffi --watch main.ts"
+    "dev": "deno run --allow-read --allow-ffi --watch main.ts",
+    "docs:api": "deno doc --html --name=sir3sjs --output=docs/_build/html/api sir3sjs/mx.ts"
   },
   "imports": {
     "@pnh/sir3sjs": "jsr:@pnh/sir3sjs@^0.1.2",
