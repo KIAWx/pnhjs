@@ -5,7 +5,8 @@
 
 Welcome to pnhjs's documentation!
 =================================
-pnhjs - Pipe Network Hydraulics JavaScript - is an open source play project to learn JavaScript using topics around pipe network hydraulics as examples.
+pnhjs - Pipe Network Hydraulics JavaScript - is a sandbox play project to learn JavaScript by using it in a pipe network hydraulics context. 
+pnhjs is a non-binding, arbitrary work in progress provided without any warranty.
 
 .. toctree::
    :maxdepth: 2
@@ -13,8 +14,7 @@ pnhjs - Pipe Network Hydraulics JavaScript - is an open source play project to l
 
    js
    sir3sjs
-
-
+   docs
 
 Indices and tables
 ==================

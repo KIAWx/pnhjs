@@ -9,3 +9,6 @@
 *.ilog
 *.XML
 *.log
+
+# Scratch
+scratch/
